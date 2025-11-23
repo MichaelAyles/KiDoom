@@ -1,0 +1,49 @@
+MIT License
+
+Copyright (c) 2025 KiDoom Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+
+ADDITIONAL LICENSES
+
+This project incorporates code from other projects with the following licenses:
+
+DOOM Engine
+-----------
+Original DOOM source code Copyright (C) 1993-1996 id Software, Inc.
+Released under the GNU General Public License v2.0 or later.
+See: https://github.com/id-Software/DOOM
+
+doomgeneric
+-----------
+Copyright (C) ozkl and contributors
+Released under the GNU General Public License v2.0.
+See: https://github.com/ozkl/doomgeneric
+
+Note: The DOOM engine components (doom/source/doomgeneric_kicad.c and related
+files) are derivative works and thus subject to the GPL v2.0. The KiCad plugin
+components (kicad_doom_plugin/) remain under the MIT License. Users must comply
+with both licenses as applicable to the respective components.
+
+DOOM WAD Files
+--------------
+The DOOM shareware WAD file (doom1.wad) is freely distributable.
+Commercial DOOM WAD files are Copyright (C) id Software and require purchase.

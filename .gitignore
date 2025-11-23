@@ -1,0 +1,131 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# KiCad
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*.kicad_pro-bak
+*-backups/
+*.bak
+*.bck
+*.kicad_pcb.lck
+*.kicad_sch.lck
+fp-info-cache
+*.net
+*.dsn
+*.ses
+*.kicad_prl
+
+# KiCad generated files
+gerber/
+*.zip
+*.gbr
+*.gm1
+*.gko
+*.gml
+*.gpi
+*.drl
+*.pdf
+*.pos
+*.csv
+
+# C/C++ compiled files
+*.o
+*.a
+*.out
+doom/doomgeneric_kicad
+doom/source/*.o
+doomgeneric/
+
+# DOOM WAD files (only commit shareware)
+doom/doom2.wad
+doom/plutonia.wad
+doom/tnt.wad
+doom/freedoom*.wad
+
+# Test outputs
+tests/*.log
+tests/benchmark_results.txt
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+.cache/
+
+# Unix socket files
+/tmp/kicad_doom.sock
+*.sock
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+core.*
+
+# Performance profiling
+*.prof
+*.stats
+*.trace
+
+# Documentation builds
+docs/_build/
+docs/.doctrees/
+
+# Screenshots/videos (usually large)
+# Uncomment if you want to ignore media
+# docs/*.gif
+# docs/*.mp4
+# docs/*.png
+# docs/*.jpg
+
+# OS-specific
+Thumbs.db
+Desktop.ini
+.Spotlight-V100
+.Trashes
+._*
+
+# Package manager
+node_modules/
+package-lock.json
+yarn.lock
