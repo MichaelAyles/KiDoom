@@ -3,80 +3,68 @@
 # Makefile for KiCad platform (doomgeneric_kicad)
 #
 # This Makefile builds DOOM for the KiCad PCB platform.
-# It should be used from within the doomgeneric source directory.
+# Based on doomgeneric framework.
 #
 # Usage:
-#   1. Clone doomgeneric: git clone https://github.com/ozkl/doomgeneric.git
-#   2. Copy this file to: doomgeneric/doomgeneric/
-#   3. Copy doomgeneric_kicad.c and doom_socket.c to same directory
-#   4. Run: make -f Makefile.kicad
-#   5. Binary will be: doomgeneric_kicad
+#   make -f Makefile.kicad
 #
 ################################################################
 
-# Paths (relative to doomgeneric/doomgeneric/ directory)
-DOOM_GENERIC = .
-DOOM_SRC = $(DOOM_GENERIC)/../../doom
+ifeq ($(V),1)
+	VB=''
+else
+	VB=@
+endif
 
 # Compiler and flags
-CC = gcc
-CFLAGS = -Wall -Wextra -O2 -g
-CFLAGS += -I$(DOOM_GENERIC) -I$(DOOM_SRC)
+CC=clang
+CFLAGS+=-ggdb3 -Os
+LDFLAGS+=-Wl,-dead_strip
+CFLAGS+=-Wall -DNORMALUNIX -DLINUX -D_DEFAULT_SOURCE
+LIBS+=-lm -lc
 
-# Linker flags
-LDFLAGS = -lm
+# subdirectory for objects
+OBJDIR=build
+OUTPUT=doomgeneric_kicad
 
-# Platform-specific object files
-OBJS = doomgeneric_kicad.o doom_socket.o
+# All DOOM source files
+SRC_DOOM = dummy.o am_map.o doomdef.o doomstat.o dstrings.o d_event.o d_items.o d_iwad.o d_loop.o d_main.o d_mode.o d_net.o f_finale.o f_wipe.o g_game.o hu_lib.o hu_stuff.o info.o i_cdmus.o i_endoom.o i_joystick.o i_scale.o i_sound.o i_system.o i_timer.o memio.o m_argv.o m_bbox.o m_cheat.o m_config.o m_controls.o m_fixed.o m_menu.o m_misc.o m_random.o p_ceilng.o p_doors.o p_enemy.o p_floor.o p_inter.o p_lights.o p_map.o p_maputl.o p_mobj.o p_plats.o p_pspr.o p_saveg.o p_setup.o p_sight.o p_spec.o p_switch.o p_telept.o p_tick.o p_user.o r_bsp.o r_data.o r_draw.o r_main.o r_plane.o r_segs.o r_sky.o r_things.o sha1.o sounds.o statdump.o st_lib.o st_stuff.o s_sound.o tables.o v_video.o wi_stuff.o w_checksum.o w_file.o w_main.o w_wad.o z_zone.o w_file_stdc.o i_input.o i_video.o doomgeneric.o doomgeneric_kicad.o doom_socket.o
 
-# Output binary name
-TARGET = doomgeneric_kicad
+OBJS += $(addprefix $(OBJDIR)/, $(SRC_DOOM))
 
-# Include doomgeneric's common Makefile for DOOM source files
-# This provides all the DOOM engine objects (*.o files)
-include $(DOOM_GENERIC)/Makefile.doomgeneric
+all: $(OUTPUT)
 
-################################################################
-# Build rules
-################################################################
+clean:
+	rm -rf $(OBJDIR)
+	rm -f $(OUTPUT)
+	rm -f $(OUTPUT).gdb
+	rm -f $(OUTPUT).map
 
-.PHONY: all clean help
-
-all: $(TARGET)
-
-# Link final binary
-$(TARGET): $(OBJS) $(DOOM_OBJS)
-	@echo "Linking $(TARGET)..."
-	$(CC) $(CFLAGS) $(OBJS) $(DOOM_OBJS) -o $@ $(LDFLAGS)
+$(OUTPUT): $(OBJS)
+	@echo [Linking $@]
+	$(VB)$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) \
+	-o $(OUTPUT) $(LIBS) -Wl,-map,$(OUTPUT).map
+	@echo [Size]
+	-size $(OUTPUT)
 	@echo ""
 	@echo "================================================"
 	@echo "  Build successful!"
-	@echo "  Binary: $(TARGET)"
+	@echo "  Binary: $(OUTPUT)"
 	@echo "================================================"
 	@echo ""
-	@echo "Next steps:"
-	@echo "  1. Copy $(TARGET) to KiDoom plugin directory"
-	@echo "  2. Ensure doom1.wad is in same directory as binary"
-	@echo "  3. Run KiCad plugin to start socket server"
-	@echo "  4. Launch ./$(TARGET)"
-	@echo ""
 
-# Compile platform files
-doomgeneric_kicad.o: doomgeneric_kicad.c doom_socket.h
-	@echo "Compiling doomgeneric_kicad.c..."
-	$(CC) $(CFLAGS) -c doomgeneric_kicad.c -o $@
+$(OBJS): | $(OBJDIR)
 
-doom_socket.o: doom_socket.c doom_socket.h
-	@echo "Compiling doom_socket.c..."
-	$(CC) $(CFLAGS) -c doom_socket.c -o $@
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
 
-# Clean build artifacts
-clean:
-	@echo "Cleaning build artifacts..."
-	rm -f $(TARGET) $(OBJS) $(DOOM_OBJS)
-	@echo "Clean complete"
+$(OBJDIR)/%.o: %.c
+	@echo [Compiling $<]
+	$(VB)$(CC) $(CFLAGS) -c $< -o $@
 
-# Help message
+print:
+	@echo OBJS: $(OBJS)
+
 help:
 	@echo "KiCad DOOM Build System"
 	@echo ""
@@ -85,46 +73,3 @@ help:
 	@echo "  clean   - Remove build artifacts"
 	@echo "  help    - Show this help message"
 	@echo ""
-	@echo "Requirements:"
-	@echo "  - GCC or Clang compiler"
-	@echo "  - doomgeneric source code"
-	@echo "  - doom1.wad (shareware WAD file)"
-	@echo ""
-	@echo "Build process:"
-	@echo "  1. Clone doomgeneric:"
-	@echo "     git clone https://github.com/ozkl/doomgeneric.git"
-	@echo ""
-	@echo "  2. Copy platform files:"
-	@echo "     cp doomgeneric_kicad.c doomgeneric/doomgeneric/"
-	@echo "     cp doom_socket.c doomgeneric/doomgeneric/"
-	@echo "     cp doom_socket.h doomgeneric/doomgeneric/"
-	@echo "     cp Makefile.kicad doomgeneric/doomgeneric/"
-	@echo ""
-	@echo "  3. Build:"
-	@echo "     cd doomgeneric/doomgeneric"
-	@echo "     make -f Makefile.kicad"
-	@echo ""
-	@echo "  4. Get WAD file:"
-	@echo "     wget https://distro.ibiblio.org/slitaz/sources/packages/d/doom1.wad"
-	@echo "     (or copy from existing DOOM installation)"
-	@echo ""
-	@echo "  5. Install:"
-	@echo "     cp doomgeneric_kicad /path/to/KiDoom/doom/"
-	@echo "     cp doom1.wad /path/to/KiDoom/doom/"
-	@echo ""
-
-################################################################
-# Notes:
-#
-# - The actual DOOM engine compilation is handled by
-#   Makefile.doomgeneric (included above), which compiles
-#   all the DOOM source files (*.c in doom/ directory).
-#
-# - We only compile our platform-specific files here:
-#   * doomgeneric_kicad.c (platform interface)
-#   * doom_socket.c (communication layer)
-#
-# - DOOM_OBJS is provided by Makefile.doomgeneric and
-#   includes all the DOOM engine object files.
-#
-################################################################

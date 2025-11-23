@@ -336,3 +336,32 @@ void DG_SetWindowTitle(const char* title) {
     /* Could send status update to Python if needed */
     (void)title;
 }
+
+/**
+ * main()
+ *
+ * Entry point for DOOM executable.
+ * Initializes doomgeneric and runs the game loop.
+ */
+int main(int argc, char** argv) {
+    printf("========================================\n");
+    printf("  KiDoom - DOOM for KiCad PCB Editor\n");
+    printf("========================================\n");
+    printf("\n");
+    printf("Starting DOOM engine...\n");
+    printf("Connecting to KiCad plugin via socket...\n");
+    printf("\n");
+
+    /* Initialize doomgeneric (calls DG_Init internally) */
+    doomgeneric_Create(argc, argv);
+
+    /* Main game loop */
+    printf("Game loop started. Rendering to KiCad PCB...\n");
+    printf("\n");
+
+    for (;;) {
+        doomgeneric_Tick();
+    }
+
+    return 0;
+}
