@@ -42,14 +42,14 @@ class DoomKiCadPlugin(pcbnew.ActionPlugin):
 
         This method is called by KiCad during plugin registration.
         """
-        self.name = "DOOM on PCB"
+        self.name = "KiDoom - DOOM on PCB"
         self.category = "Game"
         self.description = "Run DOOM using PCB traces as the rendering medium"
         self.show_toolbar_button = True
-        self.icon_file_name = os.path.join(
-            os.path.dirname(__file__),
-            'doom_icon.png'
-        )
+        # Icon is optional - KiCad will use default if not found
+        icon_path = os.path.join(os.path.dirname(__file__), 'doom_icon.png')
+        if os.path.exists(icon_path):
+            self.icon_file_name = icon_path
 
     def Run(self):
         """
