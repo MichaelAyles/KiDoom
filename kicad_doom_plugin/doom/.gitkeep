@@ -1,0 +1,7 @@
+# DOOM Binary Directory
+
+Place compiled DOOM binary and WAD file here:
+- doomgeneric_kicad (compiled binary)
+- doom1.wad (shareware DOOM data)
+
+See main project README for build instructions.

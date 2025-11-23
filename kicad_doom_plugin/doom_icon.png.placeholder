@@ -1,0 +1,13 @@
+This is a placeholder for the DOOM icon.
+
+Create a 24x24 or 32x32 PNG icon and save it as:
+  kicad_doom_plugin/doom_icon.png
+
+The icon will appear in KiCad's toolbar when the plugin is loaded.
+
+Suggested icon content:
+- DOOM logo
+- PCB trace pattern
+- Combination of both
+
+The plugin will work without an icon, but the toolbar button will be blank.
