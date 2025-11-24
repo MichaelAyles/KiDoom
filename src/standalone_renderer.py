@@ -313,6 +313,26 @@ class MinimalRenderer:
         # Sort ALL objects by distance (far to near) for proper occlusion
         walls_list.sort(key=lambda x: x[1], reverse=True)
 
+        # Draw floor and ceiling gradients FIRST (before walls)
+        # Floor: gradient from horizon (center) to bottom (brighter near player)
+        horizon_y = SCREEN_HEIGHT // 2
+        for y in range(horizon_y, SCREEN_HEIGHT):
+            # Distance from horizon (0.0 at horizon, 1.0 at bottom)
+            t = (y - horizon_y) / (SCREEN_HEIGHT - horizon_y)
+            # Brightness: darker at horizon, brighter at bottom
+            brightness = int(80 * t)  # 0 at horizon, 80 at bottom
+            floor_color = (brightness, brightness, 0)  # Yellow/brown tint
+            pygame.draw.line(self.screen, floor_color, (0, y), (SCREEN_WIDTH, y), 1)
+
+        # Ceiling: gradient from horizon (center) to top (brighter away from horizon)
+        for y in range(0, horizon_y):
+            # Distance from top (1.0 at top, 0.0 at horizon)
+            t = (horizon_y - y) / horizon_y
+            # Brightness: darker at horizon, brighter at top
+            brightness = int(60 * t)  # 0 at horizon, 60 at top
+            ceiling_color = (0, brightness, brightness)  # Cyan tint
+            pygame.draw.line(self.screen, ceiling_color, (0, y), (SCREEN_WIDTH, y), 1)
+
         # Draw all objects in order (back to front)
         for obj_type, distance, obj_data in walls_list:
             if obj_type == 'wall':
