@@ -123,6 +123,7 @@ docs/.doctrees/
 # docs/*.mp4
 # docs/*.png
 # docs/*.jpg
+*.mov
 
 # Framebuffer snapshots
 framebuffer/
