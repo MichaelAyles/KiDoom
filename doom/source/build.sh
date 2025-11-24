@@ -19,8 +19,8 @@ NC='\033[0m' # No Color
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-DOOMGENERIC_DIR="$PROJECT_ROOT/doomgeneric"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+DOOMGENERIC_DIR="$(cd "$PROJECT_ROOT/.." && pwd)/doomgeneric"
 PLUGIN_DOOM_DIR="$PROJECT_ROOT/doom"
 
 echo ""
@@ -45,33 +45,37 @@ fi
 # Step 2: Copy platform files
 echo ""
 echo -e "${YELLOW}Step 2: Copying platform files...${NC}"
-cp -v "$SCRIPT_DIR/doomgeneric_kicad.c" "$DOOMGENERIC_DIR/doomgeneric/"
+cp -v "$SCRIPT_DIR/doomgeneric_kicad_dual.c" "$DOOMGENERIC_DIR/doomgeneric/"
+cp -v "$SCRIPT_DIR/doomgeneric_kicad_dual_v2.c" "$DOOMGENERIC_DIR/doomgeneric/"
+cp -v "$SCRIPT_DIR/doomgeneric_sdl_dual.c" "$DOOMGENERIC_DIR/doomgeneric/"
 cp -v "$SCRIPT_DIR/doom_socket.c" "$DOOMGENERIC_DIR/doomgeneric/"
 cp -v "$SCRIPT_DIR/doom_socket.h" "$DOOMGENERIC_DIR/doomgeneric/"
 cp -v "$SCRIPT_DIR/Makefile.kicad" "$DOOMGENERIC_DIR/doomgeneric/"
+cp -v "$SCRIPT_DIR/Makefile.kicad_dual" "$DOOMGENERIC_DIR/doomgeneric/"
 echo -e "${GREEN}✓ Platform files copied${NC}"
 
 # Step 3: Build
 echo ""
-echo -e "${YELLOW}Step 3: Building DOOM...${NC}"
+echo -e "${YELLOW}Step 3: Building DOOM (Dual Mode: SDL + Vectors)...${NC}"
 cd "$DOOMGENERIC_DIR/doomgeneric"
-make -f Makefile.kicad clean || true  # Clean previous build
-make -f Makefile.kicad
+make -f Makefile.kicad_dual clean || true  # Clean previous build
+make -f Makefile.kicad_dual
 
-if [ -f "doomgeneric_kicad" ]; then
+if [ -f "doomgeneric_kicad_dual" ]; then
     echo -e "${GREEN}✓ Build successful!${NC}"
 else
     echo -e "${RED}✗ Build failed - binary not created${NC}"
     exit 1
 fi
 
-# Step 4: Copy to plugin directory
+# Step 4: Copy to plugin directory (rename dual to standard name)
 echo ""
 echo -e "${YELLOW}Step 4: Installing binary...${NC}"
 mkdir -p "$PLUGIN_DOOM_DIR"
-cp -v doomgeneric_kicad "$PLUGIN_DOOM_DIR/"
+cp -v doomgeneric_kicad_dual "$PLUGIN_DOOM_DIR/doomgeneric_kicad"
 chmod +x "$PLUGIN_DOOM_DIR/doomgeneric_kicad"
-echo -e "${GREEN}✓ Binary installed to $PLUGIN_DOOM_DIR/${NC}"
+echo -e "${GREEN}✓ Dual-mode binary installed as $PLUGIN_DOOM_DIR/doomgeneric_kicad${NC}"
+echo -e "${GREEN}  (Shows SDL window + sends vectors)${NC}"
 
 # Step 5: Check for WAD file
 echo ""

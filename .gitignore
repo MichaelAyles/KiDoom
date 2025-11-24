@@ -93,6 +93,10 @@ tests/benchmark_results.txt
 *.log
 .cache/
 
+# Backup directories
+src_old/
+*_backup.c
+
 # Unix socket files
 /tmp/kicad_doom.sock
 *.sock
@@ -119,6 +123,10 @@ docs/.doctrees/
 # docs/*.mp4
 # docs/*.png
 # docs/*.jpg
+
+# Framebuffer snapshots
+framebuffer/
+*.png
 
 # OS-specific
 Thumbs.db
