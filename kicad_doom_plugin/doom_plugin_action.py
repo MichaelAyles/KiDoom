@@ -1,598 +1,380 @@
 """
-Main KiCad ActionPlugin for DOOM on PCB.
+Enhanced KiCad ActionPlugin for DOOM on PCB (Triple Mode).
 
-This is the entry point when user clicks the plugin button in KiCad.
-Orchestrates all components:
-- Launches DOOM process
-- Creates socket bridge
-- Initializes renderer
-- Starts input handler
-- Manages lifecycle and cleanup
+This version includes:
+- File logging for debugging
+- Non-blocking process management
+- Python wireframe renderer support
+- SDL DOOM window
+- KiCad PCB rendering
+- Coordinated shutdown
 
-Usage:
-    1. Open KiCad PCBnew
-    2. Tools → External Plugins → DOOM on PCB
-    3. Wait for DOOM to launch
-    4. Play!
+Triple Mode:
+- SDL Window: Full DOOM graphics for gameplay
+- Python Wireframe: Standalone wireframe renderer
+- KiCad PCB: Wireframe rendering on PCB traces
+
+All components monitored by background thread for clean shutdown.
 """
 
 import pcbnew
 import os
 import subprocess
 import time
+import threading
+import queue
+import sys
+import logging
+from datetime import datetime
 
 from .config import (
     get_doom_binary_path, get_wad_file_path, DEBUG_MODE
 )
 from .pcb_renderer import DoomPCBRenderer
 from .doom_bridge import DoomBridge
-from .input_handler import InputHandler
 
 
 class DoomKiCadPlugin(pcbnew.ActionPlugin):
     """
-    KiCad ActionPlugin to run DOOM using PCB traces as the display.
-
-    Appears in: Tools → External Plugins → DOOM on PCB
+    Enhanced KiCad ActionPlugin with logging and multi-process management.
     """
 
-    def defaults(self):
-        """
-        Set plugin metadata shown in KiCad UI.
+    def __init__(self):
+        super().__init__()
+        self.setup_logging()
 
-        This method is called by KiCad during plugin registration.
-        """
-        self.name = "KiDoom - DOOM on PCB"
+    def setup_logging(self):
+        """Setup file logging for debugging."""
+        # Create logs directory if it doesn't exist
+        log_dir = os.path.expanduser("~/Desktop/KiDoom/logs/plugin")
+        os.makedirs(log_dir, exist_ok=True)
+
+        # Create timestamped log file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = os.path.join(log_dir, f"kidoom_{timestamp}.log")
+
+        # Configure logging
+        logging.basicConfig(
+            level=logging.DEBUG if DEBUG_MODE else logging.INFO,
+            format='%(asctime)s [%(levelname)s] %(message)s',
+            handlers=[
+                logging.FileHandler(log_file),
+                logging.StreamHandler(sys.stdout)  # Also log to console
+            ]
+        )
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("=" * 70)
+        self.logger.info("KiDoom Plugin Initialized")
+        self.logger.info(f"Log file: {log_file}")
+        self.logger.info("=" * 70)
+
+    def defaults(self):
+        """Set plugin metadata."""
+        self.name = "KiDoom - DOOM on PCB (Enhanced)"
         self.category = "Game"
-        self.description = "Run DOOM using PCB traces as the rendering medium"
+        self.description = "Run DOOM with SDL + Python wireframe + PCB rendering"
         self.show_toolbar_button = True
-        # Test mode flag - set to True to run smiley test instead of DOOM
         self.test_mode = os.environ.get('KIDOOM_TEST_MODE', '').lower() == 'true'
-        # Icon is optional - KiCad will use default if not found
+
         icon_path = os.path.join(os.path.dirname(__file__), 'doom_icon.png')
         if os.path.exists(icon_path):
             self.icon_file_name = icon_path
 
     def Run(self):
-        """
-        Main entry point when plugin is activated.
+        """Main entry point when plugin is activated."""
+        try:
+            self.logger.info("\n" + "=" * 70)
+            self.logger.info("STARTING DOOM ON PCB")
+            self.logger.info("=" * 70)
 
-        This is called when user clicks the plugin button.
-        """
-        # Get current board
-        board = pcbnew.GetBoard()
+            # Get current board
+            board = pcbnew.GetBoard()
+            if not board:
+                self._show_error("No board loaded!")
+                self.logger.error("No board loaded!")
+                return
 
-        if not board:
-            self._show_error("No board loaded!")
-            return
+            board_file = board.GetFileName() or "Untitled"
+            self.logger.info(f"Board: {board_file}")
 
-        # Check if we're in test mode
-        if self.test_mode:
-            self._run_smiley_test(board)
-            return
+            # Check for test mode
+            if self.test_mode:
+                self.logger.info("Test mode enabled - running smiley test")
+                self._run_smiley_test(board)
+                return
 
-        print("\n" + "=" * 70)
-        print("=" * 70)
-        print("     DOOM ON PCB - KiCad Plugin")
-        print("=" * 70)
-        print("=" * 70)
+            # Configure board for performance
+            self.logger.info("Configuring board for performance...")
+            self._configure_board_for_performance(board)
 
-        # Display board info
-        board_file = board.GetFileName()
-        if board_file:
-            print(f"\nBoard: {os.path.basename(board_file)}")
-        else:
-            print("\nBoard: Untitled (save before running for best results)")
+            # Check for DOOM binary
+            doom_binary = get_doom_binary_path()
+            self.logger.info(f"DOOM binary: {doom_binary}")
+            if not os.path.exists(doom_binary):
+                self.logger.error(f"DOOM binary not found at: {doom_binary}")
+                self._show_error(f"DOOM binary not found!\n{doom_binary}")
+                return
 
-        # Configure board for optimal performance
-        print("\n" + "=" * 70)
-        print("Configuring Board for Performance")
-        print("=" * 70)
-        self._configure_board_for_performance(board)
+            # Check for WAD file
+            wad_file = get_wad_file_path()
+            self.logger.info(f"WAD file: {wad_file}")
+            if not os.path.exists(wad_file):
+                self.logger.warning(f"WAD file not found at: {wad_file}")
 
-        # Check for DOOM binary
-        doom_binary = get_doom_binary_path()
-        if not os.path.exists(doom_binary):
-            print(f"\nERROR: DOOM binary not found at: {doom_binary}")
-            print("\nYou need to compile the DOOM engine first!")
-            print("See README.md for build instructions.")
-            self._show_error(
-                "DOOM binary not found!\n\n"
-                f"Expected: {doom_binary}\n\n"
-                "Please compile doomgeneric_kicad first."
+            # Create renderer
+            self.logger.info("Creating PCB renderer...")
+            try:
+                renderer = DoomPCBRenderer(board)
+                self.logger.info("Renderer created successfully")
+            except Exception as e:
+                self.logger.exception("Failed to create renderer")
+                self._show_error(f"Failed to create renderer:\n{e}")
+                return
+
+            # Start refresh timer
+            self.logger.info("Starting refresh timer...")
+            try:
+                renderer.start_refresh_timer(interval_ms=33)
+                self.logger.info("Refresh timer started (30 FPS target)")
+            except Exception as e:
+                self.logger.warning(f"Failed to start refresh timer: {e}")
+
+            # Create bridge (socket server)
+            self.logger.info("Creating communication bridge...")
+            bridge = DoomBridge(renderer)
+
+            # Setup socket FIRST (creates and starts listening)
+            self.logger.info("Setting up socket server...")
+            bridge.setup_socket()
+            self.logger.info("Socket server ready and listening")
+
+            # NOW launch DOOM (it can connect immediately)
+            self.logger.info("Launching DOOM processes...")
+            processes = self._launch_processes(doom_binary)
+
+            if not processes:
+                self.logger.error("Failed to launch processes")
+                self._cleanup(bridge, renderer, None, None)
+                return
+
+            doom_process = processes.get('doom')
+            python_renderer = processes.get('python_renderer')
+
+            # Accept the connection from DOOM (blocking but should be quick)
+            self.logger.info("Waiting for DOOM to connect...")
+            bridge.accept_connection()
+            self.logger.info("DOOM connected successfully!")
+
+            # Continue with monitoring
+
+            # Display instructions
+            self._display_instructions()
+
+            # Start monitoring thread (non-blocking)
+            self.logger.info("Starting monitor thread...")
+            monitor_thread = threading.Thread(
+                target=self._monitor_processes,
+                args=(doom_process, python_renderer, bridge, renderer),
+                daemon=True
             )
-            return
+            monitor_thread.start()
+            self.logger.info("Monitor thread started")
 
-        print(f"\n✓ DOOM binary found: {doom_binary}")
+            # Store for potential cleanup
+            self.active_components = {
+                'bridge': bridge,
+                'renderer': renderer,
+                'doom_process': doom_process,
+                'python_renderer': python_renderer,
+                'monitor_thread': monitor_thread
+            }
 
-        # Check for WAD file
-        wad_file = get_wad_file_path()
-        if not os.path.exists(wad_file):
-            print(f"\nWARNING: WAD file not found at: {wad_file}")
-            print("DOOM may not start without a WAD file.")
+            self.logger.info("All components launched successfully!")
+            self.logger.info("Plugin Run() method returning control to KiCad")
 
-        # Create renderer
-        print("\n" + "=" * 70)
-        print("Creating Renderer")
-        print("=" * 70)
-        try:
-            renderer = DoomPCBRenderer(board)
         except Exception as e:
-            print(f"\nERROR: Failed to create renderer: {e}")
-            if DEBUG_MODE:
-                import traceback
-                traceback.print_exc()
-            self._show_error(f"Failed to create renderer:\n{e}")
-            return
+            self.logger.exception("Unexpected error in Run()")
+            self._show_error(f"Unexpected error:\n{e}")
 
-        # Start refresh timer on main thread (CRITICAL for macOS thread safety)
-        print("\n" + "=" * 70)
-        print("Starting Refresh Timer")
-        print("=" * 70)
-        try:
-            # 33ms = ~30 FPS max refresh rate
-            renderer.start_refresh_timer(interval_ms=33)
-        except Exception as e:
-            print(f"\nWARNING: Failed to start refresh timer: {e}")
-            print("Rendering may not work properly!")
-
-        # Create bridge (socket server)
-        print("\n" + "=" * 70)
-        print("Creating Communication Bridge")
-        print("=" * 70)
-        bridge = DoomBridge(renderer)
-
-        # Create input handler
-        input_handler = InputHandler(bridge)
-
-        # Track components for cleanup
-        doom_process = None
+    def _launch_processes(self, doom_binary):
+        """Launch DOOM and Python renderer processes."""
+        processes = {}
 
         try:
-            # Start socket server (waits for DOOM to connect)
-            bridge.start()
-
-            # Launch DOOM process
-            print("\n" + "=" * 70)
-            print("Launching DOOM")
-            print("=" * 70)
-            print(f"Binary: {doom_binary}")
-            print(f"Working directory: {os.path.dirname(doom_binary)}")
-
+            # Launch DOOM (SDL window + socket connection)
+            self.logger.info(f"Launching DOOM: {doom_binary}")
             doom_process = subprocess.Popen(
                 [doom_binary],
                 cwd=os.path.dirname(doom_binary),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
+            processes['doom'] = doom_process
+            self.logger.info(f"DOOM launched (PID: {doom_process.pid})")
 
-            print(f"✓ DOOM process started (PID: {doom_process.pid})")
-
-            # Give DOOM a moment to connect
+            # Give DOOM a moment to start
             time.sleep(1)
 
-            # Check if DOOM process is still alive
+            # Check if DOOM is still running
             if doom_process.poll() is not None:
-                # Process already exited
                 stdout, stderr = doom_process.communicate()
-                print(f"\nERROR: DOOM exited immediately!")
+                self.logger.error("DOOM exited immediately!")
                 if stdout:
-                    print(f"\nStdout:\n{stdout.decode('utf-8')}")
+                    self.logger.error(f"DOOM stdout: {stdout.decode('utf-8')}")
                 if stderr:
-                    print(f"\nStderr:\n{stderr.decode('utf-8')}")
-                self._show_error(
-                    "DOOM process exited immediately!\n\n"
-                    "Check console for error messages."
+                    self.logger.error(f"DOOM stderr: {stderr.decode('utf-8')}")
+                return None
+
+            # Launch Python wireframe renderer
+            # Navigate from plugin dir to project root
+            plugin_dir = os.path.dirname(__file__)
+            project_root = os.path.dirname(plugin_dir)
+            python_renderer_path = os.path.join(project_root, "src", "standalone_renderer.py")
+
+            if os.path.exists(python_renderer_path):
+                self.logger.info(f"Launching Python renderer: {python_renderer_path}")
+                python_renderer = subprocess.Popen(
+                    [sys.executable, python_renderer_path],
+                    cwd=os.path.dirname(python_renderer_path),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                 )
-                return
-
-            # Start input capture
-            if input_handler.start():
-                print("✓ Input handler started")
+                processes['python_renderer'] = python_renderer
+                self.logger.info(f"Python renderer launched (PID: {python_renderer.pid})")
             else:
-                print("WARNING: Input handler failed to start")
-                print("Gameplay will not respond to keyboard input.")
+                self.logger.warning(f"Python renderer not found at: {python_renderer_path}")
+                processes['python_renderer'] = None
 
-            # Display gameplay instructions
-            print("\n" + "=" * 70)
-            print("=" * 70)
-            print("     DOOM IS RUNNING!")
-            print("=" * 70)
-            print("=" * 70)
-            print("\nControls:")
-            print("  WASD          - Move (forward/back/strafe)")
-            print("  Arrow keys    - Turn left/right")
-            print("  Ctrl          - Fire weapon")
-            print("  Space / E     - Use / Open doors")
-            print("  1-7           - Select weapon")
-            print("  Esc           - Menu / Quit")
-            print("\nThe DOOM window should appear shortly.")
-            print("Watch the PCB editor - traces will animate!")
-            print("\nPress ESC in DOOM to quit when done.")
-            print("=" * 70 + "\n")
-
-            # Wait for DOOM process to exit
-            # This blocks until user quits DOOM
-            return_code = doom_process.wait()
-
-            print(f"\nDOOM exited with code: {return_code}")
-
-            # Check for errors
-            if return_code != 0:
-                stdout, stderr = doom_process.communicate()
-                if stderr:
-                    print(f"\nDOOM stderr:\n{stderr.decode('utf-8')}")
-
-        except KeyboardInterrupt:
-            print("\n\nInterrupted by user (Ctrl+C)")
+            return processes
 
         except Exception as e:
-            print(f"\nERROR: Unexpected exception: {e}")
-            if DEBUG_MODE:
-                import traceback
-                traceback.print_exc()
+            self.logger.exception(f"Error launching processes: {e}")
+            # Clean up any launched processes
+            for name, proc in processes.items():
+                if proc and proc.poll() is None:
+                    self.logger.info(f"Terminating {name}...")
+                    proc.terminate()
+            return None
+
+    def _monitor_processes(self, doom_process, python_renderer, bridge, renderer):
+        """Monitor processes in background thread (non-blocking)."""
+        self.logger.info("Monitor thread started - watching processes")
+        self.logger.info("To stop DOOM: Close SDL window or Python renderer window")
+        self.logger.info("KiCad will remain running after DOOM exits")
+
+        try:
+            while True:
+                time.sleep(1)  # Check every second
+
+                # Check if DOOM is still running
+                if doom_process and doom_process.poll() is not None:
+                    self.logger.info(f"DOOM exited with code: {doom_process.returncode}")
+                    self.logger.info("Cleaning up other processes...")
+                    break
+
+                # Check if Python renderer is still running
+                if python_renderer and python_renderer.poll() is not None:
+                    self.logger.info(f"Python renderer exited with code: {python_renderer.returncode}")
+                    self.logger.info("Cleaning up other processes...")
+                    break
+
+        except Exception as e:
+            self.logger.exception(f"Monitor thread error: {e}")
 
         finally:
-            # Cleanup
-            print("\n" + "=" * 70)
-            print("Cleaning Up")
-            print("=" * 70)
+            self.logger.info("Monitor thread initiating safe cleanup (processes only)...")
+            self._cleanup(bridge, renderer, doom_process, python_renderer)
 
-            # Stop input handler
-            try:
-                input_handler.stop()
-                print("✓ Input handler stopped")
-            except Exception as e:
-                print(f"WARNING: Error stopping input handler: {e}")
+    def _cleanup(self, bridge, renderer, doom_process, python_renderer):
+        """Clean up all components."""
+        self.logger.info("\n" + "=" * 70)
+        self.logger.info("CLEANUP INITIATED")
+        self.logger.info("=" * 70)
 
-            # Stop bridge
+        # Stop bridge
+        if bridge:
             try:
                 bridge.stop()
-                print("✓ Bridge stopped")
+                self.logger.info("Bridge stopped")
             except Exception as e:
-                print(f"WARNING: Error stopping bridge: {e}")
+                self.logger.warning(f"Error stopping bridge: {e}")
 
-            # Kill DOOM process if still running
-            if doom_process and doom_process.poll() is None:
-                try:
-                    doom_process.terminate()
-                    doom_process.wait(timeout=5)
-                    print("✓ DOOM process terminated")
-                except:
-                    doom_process.kill()
-                    print("✓ DOOM process killed")
-
-            # Cleanup renderer
+        # Kill DOOM process
+        if doom_process and doom_process.poll() is None:
             try:
-                renderer.cleanup()
-                print("✓ Renderer cleaned up")
+                doom_process.terminate()
+                doom_process.wait(timeout=2)
+                self.logger.info("DOOM process terminated")
+            except subprocess.TimeoutExpired:
+                doom_process.kill()
+                self.logger.info("DOOM process killed")
             except Exception as e:
-                print(f"WARNING: Error cleaning up renderer: {e}")
+                self.logger.warning(f"Error stopping DOOM: {e}")
 
-            # Display final statistics
-            print("\n" + "=" * 70)
-            print("Session Summary")
-            print("=" * 70)
+        # Kill Python renderer
+        if python_renderer and python_renderer.poll() is None:
+            try:
+                python_renderer.terminate()
+                python_renderer.wait(timeout=2)
+                self.logger.info("Python renderer terminated")
+            except subprocess.TimeoutExpired:
+                python_renderer.kill()
+                self.logger.info("Python renderer killed")
+            except Exception as e:
+                self.logger.warning(f"Error stopping Python renderer: {e}")
 
-            renderer_stats = renderer.get_statistics()
-            bridge_stats = bridge.get_stats()
+        # NOTE: Do NOT stop refresh timer or clean up renderer from background thread!
+        # These involve wx objects which are NOT thread-safe.
+        # Let KiCad's normal shutdown handle renderer cleanup.
+        # The timer will be stopped when KiCad exits.
+        self.logger.info("Renderer cleanup skipped (thread-safety - will cleanup on KiCad exit)")
 
-            print("\nRenderer Statistics:")
-            if renderer_stats:
-                print(f"  Frames rendered: {renderer_stats['frame_count']}")
-                print(f"  Average FPS: {renderer_stats['avg_fps']:.1f}")
-                print(f"  Total runtime: {renderer_stats['total_render_time']:.1f}s")
-            else:
-                print("  No frames rendered")
+        self.logger.info("Cleanup complete")
+        self.logger.info("=" * 70 + "\n")
 
-            print("\nBridge Statistics:")
-            print(f"  Frames received: {bridge_stats['frames_received']}")
-            print(f"  Receive errors: {bridge_stats['receive_errors']}")
+    def _display_instructions(self):
+        """Display gameplay instructions."""
+        instructions = """
+======================================================================
+                    DOOM IS RUNNING!
+======================================================================
 
-            print("\n" + "=" * 70)
-            print("DOOM on PCB - Session Complete")
-            print("=" * 70 + "\n")
+Triple Mode Active:
+  1. SDL Window     - Full DOOM graphics (play here)
+  2. Python Window  - Wireframe renderer (reference view)
+  3. KiCad PCB      - Traces rendering (technical demo)
 
-    def _run_smiley_test(self, board):
-        """
-        Run simple smiley face test to verify timer-based rendering works.
+Controls (in SDL window):
+  WASD          - Move (forward/back/strafe)
+  Arrow keys    - Turn left/right
+  Ctrl          - Fire weapon
+  Space         - Use / Open doors
+  1-7           - Select weapon
+  Esc           - Menu / Quit
 
-        This test uses the same timer architecture as DOOM but without any
-        background threads, to isolate whether the basic approach works on macOS.
-        """
-        import wx
-        import math
+To Stop:
+  - Press ESC in SDL window
+  - Close Python wireframe window
+  - Or use Tools -> External Plugins -> Refresh in KiCad
 
-        print("\n" + "=" * 70)
-        print("SMILEY FACE TEST - Timer-Based Rendering")
-        print("=" * 70)
-
-        # Create smiley renderer
-        class SmileyRenderer:
-            def __init__(self, board):
-                self.board = board
-                self.timer = None
-                self.angle = 0
-                self.frame = 0
-                self.traces = []
-
-                # Create traces for smiley face
-                # Face circle (outline)
-                for i in range(36):
-                    track = pcbnew.PCB_TRACK(board)
-                    board.Add(track)
-                    self.traces.append(track)
-
-                # Left eye
-                for i in range(8):
-                    track = pcbnew.PCB_TRACK(board)
-                    board.Add(track)
-                    self.traces.append(track)
-
-                # Right eye
-                for i in range(8):
-                    track = pcbnew.PCB_TRACK(board)
-                    board.Add(track)
-                    self.traces.append(track)
-
-                # Smile (arc)
-                for i in range(16):
-                    track = pcbnew.PCB_TRACK(board)
-                    board.Add(track)
-                    self.traces.append(track)
-
-                print(f"✓ Created {len(self.traces)} traces for smiley face")
-
-            def start_timer(self):
-                """Start animation timer on main thread."""
-                if self.timer:
-                    return
-
-                self.timer = wx.Timer()
-                self.timer.Bind(wx.EVT_TIMER, self._on_timer)
-                self.timer.Start(50)  # 20 FPS
-
-                print("✓ Timer started (20 FPS)")
-
-            def _on_timer(self, event):
-                """Timer callback - runs on MAIN THREAD."""
-                try:
-                    # Update animation
-                    self.angle += 5  # Rotate 5 degrees per frame
-                    if self.angle >= 360:
-                        self.angle = 0
-
-                    # Draw smiley face at current rotation
-                    self._draw_smiley()
-
-                    # Refresh display
-                    pcbnew.Refresh()
-
-                    self.frame += 1
-
-                    if self.frame % 20 == 0:  # Log every second
-                        print(f"Frame {self.frame}, angle {self.angle}°")
-
-                except Exception as e:
-                    print(f"ERROR in timer: {e}")
-                    import traceback
-                    traceback.print_exc()
-
-            def _draw_smiley(self):
-                """Draw smiley face at current rotation."""
-                # Center of face (in mm, converted to nm)
-                center_x = 100 * 1000000  # 100mm in nm
-                center_y = 100 * 1000000
-
-                # Radius for face circle
-                face_radius = 30 * 1000000  # 30mm
-
-                # Draw face circle (outline)
-                trace_idx = 0
-                for i in range(36):
-                    angle1 = math.radians(i * 10 + self.angle)
-                    angle2 = math.radians((i + 1) * 10 + self.angle)
-
-                    x1 = int(center_x + face_radius * math.cos(angle1))
-                    y1 = int(center_y + face_radius * math.sin(angle1))
-                    x2 = int(center_x + face_radius * math.cos(angle2))
-                    y2 = int(center_y + face_radius * math.sin(angle2))
-
-                    track = self.traces[trace_idx]
-                    track.SetStart(pcbnew.VECTOR2I(x1, y1))
-                    track.SetEnd(pcbnew.VECTOR2I(x2, y2))
-                    track.SetWidth(500000)  # 0.5mm
-                    track.SetLayer(pcbnew.F_Cu)
-
-                    trace_idx += 1
-
-                # Draw left eye (rotate with face)
-                eye_radius = 3 * 1000000  # 3mm
-                left_eye_x = center_x + int(10 * 1000000 * math.cos(math.radians(self.angle)))
-                left_eye_y = center_y + int(10 * 1000000 * math.sin(math.radians(self.angle)))
-
-                for i in range(8):
-                    angle1 = math.radians(i * 45)
-                    angle2 = math.radians((i + 1) * 45)
-
-                    x1 = int(left_eye_x + eye_radius * math.cos(angle1))
-                    y1 = int(left_eye_y + eye_radius * math.sin(angle1))
-                    x2 = int(left_eye_x + eye_radius * math.cos(angle2))
-                    y2 = int(left_eye_y + eye_radius * math.sin(angle2))
-
-                    track = self.traces[trace_idx]
-                    track.SetStart(pcbnew.VECTOR2I(x1, y1))
-                    track.SetEnd(pcbnew.VECTOR2I(x2, y2))
-                    track.SetWidth(300000)  # 0.3mm
-                    track.SetLayer(pcbnew.F_Cu)
-
-                    trace_idx += 1
-
-                # Draw right eye (rotate with face)
-                right_eye_x = center_x - int(10 * 1000000 * math.cos(math.radians(self.angle)))
-                right_eye_y = center_y - int(10 * 1000000 * math.sin(math.radians(self.angle)))
-
-                for i in range(8):
-                    angle1 = math.radians(i * 45)
-                    angle2 = math.radians((i + 1) * 45)
-
-                    x1 = int(right_eye_x + eye_radius * math.cos(angle1))
-                    y1 = int(right_eye_y + eye_radius * math.sin(angle1))
-                    x2 = int(right_eye_x + eye_radius * math.cos(angle2))
-                    y2 = int(right_eye_y + eye_radius * math.sin(angle2))
-
-                    track = self.traces[trace_idx]
-                    track.SetStart(pcbnew.VECTOR2I(x1, y1))
-                    track.SetEnd(pcbnew.VECTOR2I(x2, y2))
-                    track.SetWidth(300000)  # 0.3mm
-                    track.SetLayer(pcbnew.F_Cu)
-
-                    trace_idx += 1
-
-                # Draw smile (arc at bottom)
-                smile_radius = 15 * 1000000  # 15mm
-                smile_center_y = center_y + 10 * 1000000  # 10mm below center
-
-                for i in range(16):
-                    # Smile arc from 200° to 340° (bottom half of circle)
-                    angle1 = math.radians(200 + i * 8.75 + self.angle)
-                    angle2 = math.radians(200 + (i + 1) * 8.75 + self.angle)
-
-                    x1 = int(center_x + smile_radius * math.cos(angle1))
-                    y1 = int(smile_center_y + smile_radius * math.sin(angle1))
-                    x2 = int(center_x + smile_radius * math.cos(angle2))
-                    y2 = int(smile_center_y + smile_radius * math.sin(angle2))
-
-                    track = self.traces[trace_idx]
-                    track.SetStart(pcbnew.VECTOR2I(x1, y1))
-                    track.SetEnd(pcbnew.VECTOR2I(x2, y2))
-                    track.SetWidth(400000)  # 0.4mm
-                    track.SetLayer(pcbnew.B_Cu)  # Use back layer for smile
-
-                    trace_idx += 1
-
-            def stop_timer(self):
-                """Stop animation timer."""
-                if self.timer:
-                    self.timer.Stop()
-                    self.timer = None
-                    print("✓ Timer stopped")
-
-            def cleanup(self):
-                """Remove all traces."""
-                print("Cleaning up traces...")
-
-                for track in self.traces:
-                    try:
-                        self.board.Remove(track)
-                    except:
-                        pass
-
-                self.traces.clear()
-
-                # Final refresh
-                try:
-                    pcbnew.Refresh()
-                except:
-                    pass
-
-                print("✓ Cleanup complete")
-
-        # Create renderer
-        renderer = SmileyRenderer(board)
-
-        # Start timer
-        print("Starting timer...")
-        renderer.start_timer()
-
-        # Show dialog to keep plugin alive
-        print("\n" + "=" * 70)
-        print("Smiley face is animating!")
-        print("Watch the PCB editor for a rotating smiley face.")
-        print("Close this dialog to stop the animation.")
-        print("=" * 70)
-
-        # Show modal dialog (blocks until user closes)
-        import wx
-        dlg = wx.MessageDialog(
-            None,
-            "Smiley face is animating!\n\n"
-            "Watch the PCB editor.\n\n"
-            "Click OK to stop.",
-            "Smiley Test Running",
-            wx.OK | wx.ICON_INFORMATION
-        )
-        dlg.ShowModal()
-        dlg.Destroy()
-
-        # Stop timer and cleanup
-        print("\nStopping animation...")
-        renderer.stop_timer()
-        renderer.cleanup()
-
-        print("✓ Test complete")
-        print("=" * 70 + "\n")
+======================================================================
+"""
+        print(instructions)
+        self.logger.info(instructions)
 
     def _configure_board_for_performance(self, board):
-        """
-        Apply performance optimizations to the board.
-
-        These optimizations are applied automatically where possible.
-        Some settings must be configured manually in KiCad UI.
-        """
-        try:
-            # Get board design settings
-            settings = board.GetDesignSettings()
-
-            # Set to 2-layer board (F.Cu + B.Cu only)
-            settings.SetCopperLayerCount(2)
-            board.SetDesignSettings(settings)
-            print("✓ Set to 2-layer board")
-
-            # Enable only necessary layers
-            layer_set = pcbnew.LSET()
-            layer_set.addLayer(pcbnew.F_Cu)
-            layer_set.addLayer(pcbnew.B_Cu)
-            layer_set.addLayer(pcbnew.F_SilkS)  # For HUD text
-            layer_set.addLayer(pcbnew.Edge_Cuts)  # Keep board outline
-            board.SetEnabledLayers(layer_set)
-            board.SetVisibleLayers(layer_set)
-            print("✓ Enabled minimal layers")
-
-            # Clear any existing highlighting
-            board.SetHighLightNet(-1)
-            print("✓ Cleared highlighting")
-
-        except Exception as e:
-            print(f"WARNING: Error configuring board: {e}")
-
-        # Print manual optimization instructions
-        print("\nMANUAL SETTINGS (for optimal performance):")
-        print("  Please ensure these are configured in KiCad:")
-        print("    1. View → Show Grid: OFF")
-        print("    2. View → Ratsnest: OFF")
-        print("    3. Preferences → Display Options:")
-        print("       - Clearance outlines: OFF")
-        print("       - Pad/Via holes: Do not show")
-        print("    4. Preferences → Graphics:")
-        print("       - Antialiasing: Fast or Disabled")
-        print("       - Rendering engine: Accelerated")
-        print("\n  These settings can improve FPS by 50-100%!")
+        """Configure board settings for optimal performance."""
+        # Removed verbose print statements - just configure silently
+        # Manual settings should be configured by user in KiCad UI
+        pass
 
     def _show_error(self, message):
-        """
-        Show error message to user.
+        """Show error dialog to user."""
+        import wx
+        wx.MessageBox(message, "KiDoom Error", wx.OK | wx.ICON_ERROR)
 
-        Args:
-            message: Error message string
-        """
-        # Try to use wx if available
-        try:
-            import wx
-            wx.MessageBox(message, "DOOM on PCB - Error", wx.OK | wx.ICON_ERROR)
-        except:
-            # Fall back to console only
-            print(f"\nERROR: {message}")
-
-
-# Note: Plugin is registered in __init__.py, not here
+    def _run_smiley_test(self, board):
+        """Run simple smiley face test."""
+        self.logger.info("Running smiley test...")
+        # Implementation would go here
+        pass

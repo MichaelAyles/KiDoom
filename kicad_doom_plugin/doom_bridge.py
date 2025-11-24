@@ -10,9 +10,9 @@ Protocol Format:
     [4 bytes: message_type][4 bytes: payload_length][N bytes: JSON payload]
 
 Message Types:
-    0x01: FRAME_DATA    - DOOM → Python (rendering data)
-    0x02: KEY_EVENT     - Python → DOOM (keyboard input)
-    0x03: INIT_COMPLETE - Python → DOOM (ready signal)
+    0x01: FRAME_DATA    - DOOM -> Python (rendering data)
+    0x02: KEY_EVENT     - Python -> DOOM (keyboard input)
+    0x03: INIT_COMPLETE - Python -> DOOM (ready signal)
     0x04: SHUTDOWN      - Bidirectional (cleanup)
 """
 
@@ -61,25 +61,24 @@ class DoomBridge:
         self.total_receive_time = 0.0
         self.receive_errors = 0
 
-    def start(self):
+    def setup_socket(self):
         """
-        Start socket server and wait for DOOM to connect.
+        Create and bind socket, start listening (non-blocking).
 
-        This method blocks until DOOM connects (or timeout).
+        Call this BEFORE launching DOOM so the socket exists.
 
         Raises:
-            socket.timeout: If DOOM doesn't connect within SOCKET_TIMEOUT
             Exception: If socket creation or binding fails
         """
         print("\n" + "=" * 70)
-        print("Starting DOOM Bridge Socket Server")
+        print("Setting Up DOOM Bridge Socket Server")
         print("=" * 70)
 
         # Remove old socket file if exists
         try:
             os.unlink(SOCKET_PATH)
             if DEBUG_MODE:
-                print(f"✓ Removed existing socket: {SOCKET_PATH}")
+                print(f"[OK] Removed existing socket: {SOCKET_PATH}")
         except FileNotFoundError:
             pass
         except Exception as e:
@@ -91,19 +90,28 @@ class DoomBridge:
             self.socket.bind(SOCKET_PATH)
             self.socket.listen(1)
             self.socket.settimeout(SOCKET_TIMEOUT)
-            print(f"✓ Socket created: {SOCKET_PATH}")
+            print(f"[OK] Socket created and listening: {SOCKET_PATH}")
             print(f"  Timeout: {SOCKET_TIMEOUT}s")
+            print(f"  Ready for DOOM to connect")
         except Exception as e:
             print(f"ERROR: Failed to create socket: {e}")
             raise
 
+    def accept_connection(self):
+        """
+        Wait for and accept DOOM's connection (blocking).
+
+        Call this AFTER launching DOOM.
+
+        Raises:
+            socket.timeout: If DOOM doesn't connect within SOCKET_TIMEOUT
+        """
         print(f"\nWaiting for DOOM to connect...")
-        print(f"(Make sure doomgeneric_kicad is running)")
 
         # Accept connection (blocking with timeout)
         try:
             self.connection, _ = self.socket.accept()
-            print("✓ DOOM connected!")
+            print("[OK] DOOM connected!")
         except socket.timeout:
             print("ERROR: DOOM didn't connect within timeout")
             self.stop()
@@ -113,7 +121,7 @@ class DoomBridge:
         try:
             self._send_message(MSG_INIT_COMPLETE, {})
             if DEBUG_MODE:
-                print("✓ Sent INIT_COMPLETE to DOOM")
+                print("[OK] Sent INIT_COMPLETE to DOOM")
         except Exception as e:
             print(f"ERROR: Failed to send INIT_COMPLETE: {e}")
             self.stop()
@@ -123,8 +131,18 @@ class DoomBridge:
         self.running = True
         self.thread = threading.Thread(target=self._receive_loop, daemon=True)
         self.thread.start()
+        if DEBUG_MODE:
+            print("[OK] Receive loop started in background thread")
 
-        print("✓ Receive loop started in background thread")
+    def start(self):
+        """
+        Convenience method: setup socket and accept connection.
+
+        For backward compatibility. Prefer using setup_socket() and
+        accept_connection() separately for better control.
+        """
+        self.setup_socket()
+        self.accept_connection()
         print("=" * 70 + "\n")
 
     def _receive_loop(self):

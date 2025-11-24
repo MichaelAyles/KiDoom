@@ -12,7 +12,7 @@ DOOM coordinate system:
 KiCad coordinate system:
     - Origin (0,0) at arbitrary board location (typically center)
     - X increases right
-    - Y increases UP (inverted from screen space)
+    - Y increases DOWN on screen (same as DOOM - higher Y = lower on screen)
     - Units: nanometers (nm)
 """
 
@@ -40,6 +40,11 @@ class CoordinateTransform:
     CENTER_X = DOOM_WIDTH / 2
     CENTER_Y = DOOM_HEIGHT / 2
 
+    # A4 landscape page center offset (in nanometers)
+    # A4 landscape: 297mm x 210mm, center at (148.5mm, 105mm)
+    A4_CENTER_X_NM = 148500000  # 148.5mm in nm
+    A4_CENTER_Y_NM = 105000000  # 105mm in nm
+
     @staticmethod
     def doom_to_kicad(doom_x, doom_y):
         """
@@ -54,24 +59,29 @@ class CoordinateTransform:
 
         Example:
             >>> CoordinateTransform.doom_to_kicad(0, 0)
-            (-80000000, 50000000)  # Top-left corner
+            (68500000, 55000000)  # Top-left corner (centered on A4)
 
             >>> CoordinateTransform.doom_to_kicad(160, 100)
-            (0, 0)  # Center
+            (148500000, 105000000)  # Center (A4 page center)
 
             >>> CoordinateTransform.doom_to_kicad(320, 200)
-            (80000000, -50000000)  # Bottom-right corner
+            (228500000, 155000000)  # Bottom-right corner
         """
-        # Center the coordinate system
+        # Center the coordinate system (relative to DOOM center)
         x_centered = doom_x - CoordinateTransform.CENTER_X
         y_centered = doom_y - CoordinateTransform.CENTER_Y
 
-        # Flip Y axis (DOOM Y down, KiCad Y up)
-        y_flipped = -y_centered
+        # No Y flip needed - both DOOM and KiCad have Y increasing downward on screen
+        # (KiCad's engineering coordinate system has Y "up" mathematically,
+        #  but on screen, higher Y values appear lower/toward bottom)
 
         # Scale to nanometers
         kicad_x = int(x_centered * CoordinateTransform.SCALE)
-        kicad_y = int(y_flipped * CoordinateTransform.SCALE)
+        kicad_y = int(y_centered * CoordinateTransform.SCALE)
+
+        # Offset to center on A4 page
+        kicad_x += CoordinateTransform.A4_CENTER_X_NM
+        kicad_y += CoordinateTransform.A4_CENTER_Y_NM
 
         return kicad_x, kicad_y
 
@@ -89,16 +99,19 @@ class CoordinateTransform:
 
         Note: This is rarely needed, but provided for completeness.
         """
+        # Remove A4 page offset
+        kicad_x_nm -= CoordinateTransform.A4_CENTER_X_NM
+        kicad_y_nm -= CoordinateTransform.A4_CENTER_Y_NM
+
         # Unscale from nanometers
         x_unscaled = kicad_x_nm / CoordinateTransform.SCALE
         y_unscaled = kicad_y_nm / CoordinateTransform.SCALE
 
-        # Unflip Y axis
-        y_unflipped = -y_unscaled
+        # No Y unflip needed (wasn't flipped in forward transform)
 
         # Uncenter
         doom_x = x_unscaled + CoordinateTransform.CENTER_X
-        doom_y = y_unflipped + CoordinateTransform.CENTER_Y
+        doom_y = y_unscaled + CoordinateTransform.CENTER_Y
 
         return int(doom_x), int(doom_y)
 
@@ -217,7 +230,7 @@ def debug_coordinate_system():
 
     for name, dx, dy in test_points:
         kx, ky = CoordinateTransform.doom_to_kicad(dx, dy)
-        print(f"  {name:15} DOOM({dx:>5.0f}, {dy:>5.0f}) → "
+        print(f"  {name:15} DOOM({dx:>5.0f}, {dy:>5.0f}) -> "
               f"KiCad({kx:>10}, {ky:>10}) nm")
 
     print("=" * 70)

@@ -153,7 +153,7 @@ class DoomInputHandler:
         self.listener.start()
 
         if DEBUG_MODE:
-            print("✓ Input listener started")
+            print("[OK] Input listener started")
 
         return True
 
@@ -181,7 +181,7 @@ class DoomInputHandler:
                     self.bridge.send_key_event(pressed=True, key_code=doom_key)
 
                     if DEBUG_MODE:
-                        print(f"Key press: {key_char} → DOOM key {doom_key:#04x}")
+                        print(f"Key press: {key_char} -> DOOM key {doom_key:#04x}")
 
         except Exception as e:
             if DEBUG_MODE:
@@ -211,7 +211,7 @@ class DoomInputHandler:
                     self.bridge.send_key_event(pressed=False, key_code=doom_key)
 
                     if DEBUG_MODE:
-                        print(f"Key release: {key_char} → DOOM key {doom_key:#04x}")
+                        print(f"Key release: {key_char} -> DOOM key {doom_key:#04x}")
 
         except Exception as e:
             if DEBUG_MODE:
@@ -227,7 +227,7 @@ class DoomInputHandler:
             try:
                 self.listener.stop()
                 if DEBUG_MODE:
-                    print("✓ Input listener stopped")
+                    print("[OK] Input listener stopped")
             except Exception as e:
                 if DEBUG_MODE:
                     print(f"WARNING: Error stopping listener: {e}")

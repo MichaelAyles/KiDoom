@@ -2,10 +2,10 @@
 Core PCB renderer for DOOM frames.
 
 Converts DOOM frame data (walls, entities, projectiles, HUD) into PCB elements:
-- Wall segments → PCB_TRACK (copper traces)
-- Entities → FOOTPRINT (real components)
-- Projectiles → PCB_VIA (drilled holes)
-- HUD → PCB_TEXT (silkscreen text)
+- Wall segments -> PCB_TRACK (copper traces)
+- Entities -> FOOTPRINT (real components)
+- Projectiles -> PCB_VIA (drilled holes)
+- HUD -> PCB_TEXT (silkscreen text)
 
 Performance: Benchmarked at 82.6 FPS on M1 MacBook Pro
 Expected gameplay: 40-60 FPS with full DOOM engine
@@ -65,7 +65,7 @@ class DoomPCBRenderer:
         # This eliminates ratsnest (airwire) calculation overhead
         print("Creating shared DOOM net...")
         self.doom_net = self._create_doom_net()
-        print(f"✓ Created net: {self.doom_net.GetNetname()}")
+        print(f"[OK] Created net: {self.doom_net.GetNetname()}")
 
         # Create object pools (pre-allocate all PCB objects)
         print("\nCreating object pools...")
@@ -88,7 +88,7 @@ class DoomPCBRenderer:
         # Refresh timer (runs on main thread)
         self.refresh_timer = None
 
-        print("\n✓ Renderer initialized")
+        print("\n[OK] Renderer initialized")
         print("=" * 70 + "\n")
 
     def _create_doom_net(self):
@@ -212,10 +212,10 @@ class DoomPCBRenderer:
         Render wall segments as wireframe PCB traces.
 
         Each wall becomes 4 PCB_TRACK objects (wireframe box):
-        - Top edge: (x1, y1_top) → (x2, y2_top)
-        - Bottom edge: (x1, y1_bottom) → (x2, y2_bottom)
-        - Left edge: (x1, y1_top) → (x1, y1_bottom)
-        - Right edge: (x2, y2_top) → (x2, y2_bottom)
+        - Top edge: (x1, y1_top) -> (x2, y2_top)
+        - Bottom edge: (x1, y1_bottom) -> (x2, y2_bottom)
+        - Left edge: (x1, y1_top) -> (x1, y1_bottom)
+        - Right edge: (x2, y2_top) -> (x2, y2_bottom)
 
         Distance from player determines layer (F.Cu/B.Cu) and width.
 
@@ -266,14 +266,14 @@ class DoomPCBRenderer:
                 trace.SetStart(pcbnew.VECTOR2I(kicad_sx, kicad_sy))
                 trace.SetEnd(pcbnew.VECTOR2I(kicad_ex, kicad_ey))
 
-                # Encode distance as layer and width
-                # Close walls: F.Cu (red), thick traces (bright)
-                # Far walls: B.Cu (cyan), thin traces (dim)
+                # Encode distance as width only
+                # All walls are blue (B.Cu) for consistency
+                # Close walls: thick traces (bright)
+                # Far walls: thin traces (dim)
+                trace.SetLayer(pcbnew.B_Cu)
                 if distance < DISTANCE_THRESHOLD:
-                    trace.SetLayer(pcbnew.F_Cu)
                     trace.SetWidth(TRACE_WIDTH_CLOSE)
                 else:
-                    trace.SetLayer(pcbnew.B_Cu)
                     trace.SetWidth(TRACE_WIDTH_FAR)
 
                 # Set net (required for electrical authenticity)
@@ -287,10 +287,10 @@ class DoomPCBRenderer:
         Render player and enemies as wireframe rectangles.
 
         Each entity becomes 4 PCB_TRACK objects (wireframe box):
-        - Top edge: (x_left, y_top) → (x_right, y_top)
-        - Bottom edge: (x_left, y_bottom) → (x_right, y_bottom)
-        - Left edge: (x_left, y_top) → (x_left, y_bottom)
-        - Right edge: (x_right, y_top) → (x_right, y_bottom)
+        - Top edge: (x_left, y_top) -> (x_right, y_top)
+        - Bottom edge: (x_left, y_bottom) -> (x_right, y_bottom)
+        - Left edge: (x_left, y_top) -> (x_left, y_bottom)
+        - Right edge: (x_right, y_top) -> (x_right, y_bottom)
 
         Entities use consistent styling (always F.Cu, thicker traces) to distinguish
         from walls.
@@ -558,7 +558,7 @@ class DoomPCBRenderer:
         self.refresh_timer.Bind(wx.EVT_TIMER, self._on_refresh_timer)
         self.refresh_timer.Start(interval_ms)
 
-        print(f"✓ Started refresh timer ({1000/interval_ms:.1f} FPS max)")
+        print(f"[OK] Started refresh timer ({1000/interval_ms:.1f} FPS max)")
 
     def _on_refresh_timer(self, event):
         """
@@ -603,7 +603,7 @@ class DoomPCBRenderer:
         if self.refresh_timer:
             self.refresh_timer.Stop()
             self.refresh_timer = None
-            print("✓ Stopped refresh timer")
+            print("[OK] Stopped refresh timer")
 
     def cleanup(self):
         """
@@ -643,4 +643,4 @@ class DoomPCBRenderer:
                   f"({stats['slow_frame_count']/stats['frame_count']*100:.1f}%)")
             print("=" * 70)
 
-        print("✓ Renderer cleaned up")
+        print("[OK] Renderer cleaned up")
