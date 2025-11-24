@@ -332,6 +332,54 @@ void DG_DrawFrame()
 
   g_frame_count++;
 
+  /* Screenshot capture every 10 seconds */
+  static uint32_t last_screenshot_time = 0;
+  uint32_t current_time = get_time_ms();
+
+  if (last_screenshot_time == 0) {
+      last_screenshot_time = current_time;
+  } else if (current_time - last_screenshot_time >= 10000) {  /* 10 seconds */
+      /* Create framebuffer directory if it doesn't exist */
+      system("mkdir -p ../framebuffer");
+
+      /* Generate filename with timestamp */
+      char sdl_path[256];
+      snprintf(sdl_path, sizeof(sdl_path), "../framebuffer/sdl_%u.bmp", current_time / 1000);
+
+      /* Save SDL surface to BMP */
+      SDL_Surface* surface = SDL_CreateRGBSurfaceFrom(
+          DG_ScreenBuffer,
+          DOOMGENERIC_RESX,
+          DOOMGENERIC_RESY,
+          32,
+          DOOMGENERIC_RESX * sizeof(uint32_t),
+          0x00FF0000,  /* Red mask */
+          0x0000FF00,  /* Green mask */
+          0x000000FF,  /* Blue mask */
+          0xFF000000   /* Alpha mask */
+      );
+
+      if (surface) {
+          if (SDL_SaveBMP(surface, sdl_path) == 0) {
+              /* Send screenshot message to Python */
+              char json_msg[512];
+              snprintf(json_msg, sizeof(json_msg), "{\"sdl_path\":\"%s\"}", sdl_path);
+              if (doom_socket_send_message(MSG_SCREENSHOT, json_msg, strlen(json_msg)) == 0) {
+                  printf("✓ SDL screenshot saved: %s\n", sdl_path);
+              } else {
+                  fprintf(stderr, "Warning: Failed to send screenshot message\n");
+              }
+          } else {
+              fprintf(stderr, "Warning: Failed to save SDL screenshot: %s\n", SDL_GetError());
+          }
+          SDL_FreeSurface(surface);
+      } else {
+          fprintf(stderr, "Warning: Failed to create SDL surface: %s\n", SDL_GetError());
+      }
+
+      last_screenshot_time = current_time;
+  }
+
   if (g_frame_count % 100 == 0) {
       uint32_t elapsed_ms = get_time_ms() - g_start_time_ms;
       float fps = (g_frame_count * 1000.0f) / elapsed_ms;

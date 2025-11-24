@@ -20,6 +20,7 @@
 #define MSG_KEY_EVENT     0x02  /* Python → DOOM: Keyboard event */
 #define MSG_INIT_COMPLETE 0x03  /* Python → DOOM: Connection established */
 #define MSG_SHUTDOWN      0x04  /* Bidirectional: Clean shutdown */
+#define MSG_SCREENSHOT    0x05  /* DOOM → Python: SDL screenshot saved, request combine */
 
 /* Socket path (must match Python side) */
 #define SOCKET_PATH "/tmp/kicad_doom.sock"
@@ -68,5 +69,18 @@ void doom_socket_close(void);
  * Returns: 1 if connected, 0 if not
  */
 int doom_socket_is_connected(void);
+
+/**
+ * Send generic message with JSON payload.
+ * Used for non-frame messages like screenshot notifications.
+ *
+ * Args:
+ *   msg_type: Message type constant (e.g. MSG_SCREENSHOT)
+ *   json_data: JSON string payload
+ *   len: Length of json_data in bytes
+ *
+ * Returns: 0 on success, -1 on error
+ */
+int doom_socket_send_message(uint32_t msg_type, const char* json_data, size_t len);
 
 #endif /* DOOM_SOCKET_H */

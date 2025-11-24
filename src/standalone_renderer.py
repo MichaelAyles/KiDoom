@@ -31,6 +31,7 @@ MSG_FRAME_DATA = 0x01
 MSG_KEY_EVENT = 0x02
 MSG_INIT_COMPLETE = 0x03
 MSG_SHUTDOWN = 0x04
+MSG_SCREENSHOT = 0x05  # C → Python: SDL screenshot saved, please combine
 
 # Display
 SCREEN_WIDTH = 800
@@ -71,6 +72,37 @@ class MinimalRenderer:
             import shutil
             shutil.rmtree(self.framebuffer_dir)
             print(f"✓ Cleared old screenshots from {self.framebuffer_dir}/")
+
+    def _handle_screenshot_request(self, sdl_path):
+        """Handle screenshot request from C code - combine SDL + Python screenshots."""
+        try:
+            # Extract timestamp from SDL path
+            import re
+            match = re.search(r'(\d+)', os.path.basename(sdl_path))
+            if not match:
+                print("Warning: Could not extract timestamp from SDL path")
+                return
+
+            timestamp = match.group(1)
+
+            # Save Python renderer screenshot
+            python_path = os.path.join(self.framebuffer_dir, f"python_{timestamp}.png")
+            pygame.image.save(self.screen, python_path)
+
+            # Combine screenshots
+            combined_path = os.path.join(self.framebuffer_dir, f"combined_{timestamp}.png")
+            if self._combine_screenshots(python_path, sdl_path, combined_path):
+                print(f"✓ Combined screenshot saved: {combined_path}")
+                # Clean up individual screenshots
+                try:
+                    os.remove(python_path)
+                    os.remove(sdl_path)
+                except:
+                    pass
+            else:
+                print(f"Warning: Could not combine screenshots")
+        except Exception as e:
+            print(f"Error handling screenshot request: {e}")
 
     def _capture_sdl_window(self, output_path):
         """Capture SDL window screenshot using screencapture on macOS."""
@@ -223,6 +255,11 @@ class MinimalRenderer:
                     if msg_type == MSG_FRAME_DATA:
                         with self.frame_lock:
                             self.current_frame = payload
+                    elif msg_type == MSG_SCREENSHOT:
+                        # C code has saved SDL screenshot, wants us to combine
+                        sdl_path = payload.get('sdl_path')
+                        if sdl_path:
+                            self._handle_screenshot_request(sdl_path)
                     elif msg_type == MSG_SHUTDOWN:
                         print("Shutdown received")
                         self.running = False
@@ -385,37 +422,8 @@ class MinimalRenderer:
             self.last_fps_time = current_time
             self.start_time = current_time
 
-        # Take combined screenshot every 10 seconds
-        if self.last_screenshot_time is None:
-            self.last_screenshot_time = current_time
-        elif current_time - self.last_screenshot_time >= 10.0:
-            timestamp = int(current_time)
-
-            # Save Python renderer screenshot
-            python_path = os.path.join(self.framebuffer_dir, f"python_{timestamp}.png")
-            pygame.image.save(self.screen, python_path)
-
-            # Capture SDL window screenshot
-            sdl_path = os.path.join(self.framebuffer_dir, f"sdl_{timestamp}.png")
-            sdl_captured = self._capture_sdl_window(sdl_path)
-
-            if sdl_captured:
-                # Combine screenshots side-by-side
-                combined_path = os.path.join(self.framebuffer_dir, f"combined_{timestamp}.png")
-                if self._combine_screenshots(python_path, sdl_path, combined_path):
-                    print(f"✓ Combined screenshot saved: {combined_path}")
-                    # Clean up individual screenshots
-                    try:
-                        os.remove(python_path)
-                        os.remove(sdl_path)
-                    except:
-                        pass
-                else:
-                    print(f"✓ Python screenshot saved: {python_path}")
-            else:
-                print(f"✓ Python screenshot saved: {python_path}")
-
-            self.last_screenshot_time = current_time
+        # Screenshot capture is now triggered by C code via MSG_SCREENSHOT
+        # (removed timer-based capture)
 
     def handle_input(self):
         for event in pygame.event.get():

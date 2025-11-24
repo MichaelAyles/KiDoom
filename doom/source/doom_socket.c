@@ -278,3 +278,30 @@ void doom_socket_close(void) {
 int doom_socket_is_connected(void) {
     return (g_socket_fd >= 0) ? 1 : 0;
 }
+
+int doom_socket_send_message(uint32_t msg_type, const char* json_data, size_t len) {
+    uint32_t header[2];
+
+    if (g_socket_fd < 0) {
+        fprintf(stderr, "doom_socket_send_message: not connected\n");
+        return -1;
+    }
+
+    /* Build message header */
+    header[0] = msg_type;
+    header[1] = (uint32_t)len;
+
+    /* Send header */
+    if (send_exactly(g_socket_fd, header, sizeof(header)) < 0) {
+        fprintf(stderr, "doom_socket_send_message: failed to send header\n");
+        return -1;
+    }
+
+    /* Send JSON payload */
+    if (send_exactly(g_socket_fd, json_data, len) < 0) {
+        fprintf(stderr, "doom_socket_send_message: failed to send payload\n");
+        return -1;
+    }
+
+    return 0;
+}
