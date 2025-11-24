@@ -300,8 +300,12 @@ class MinimalRenderer:
         walls = frame.get('walls', [])
         walls_list = []
         for wall in walls:
-            if isinstance(wall, list) and len(wall) >= 7:
+            if isinstance(wall, list) and len(wall) >= 8:
                 distance = wall[6]
+                silhouette = wall[7]
+                # Skip portal walls (silhouette=0) - these are openings, not solid walls
+                if silhouette == 0:
+                    continue
                 walls_list.append(('wall', distance, wall))
 
         # Collect all entities with distance

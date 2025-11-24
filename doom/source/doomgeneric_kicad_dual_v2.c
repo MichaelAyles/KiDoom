@@ -184,13 +184,16 @@ static char* extract_vectors_to_json(size_t* out_len) {
         if (y2_bottom < 0) y2_bottom = 0;
         if (y2_bottom >= viewheight) y2_bottom = viewheight - 1;
 
+        /* Get silhouette to determine if this is a solid wall or portal */
+        int silhouette = ds->silhouette;
+
         if (wall_output > 0) {
             offset += snprintf(json_buf + offset, sizeof(json_buf) - offset, ",");
         }
 
         offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
-                          "[%d,%d,%d,%d,%d,%d,%d]",
-                          x1, y1_top, y1_bottom, x2, y2_top, y2_bottom, distance);
+                          "[%d,%d,%d,%d,%d,%d,%d,%d]",
+                          x1, y1_top, y1_bottom, x2, y2_top, y2_bottom, distance, silhouette);
         wall_output++;
     }
 
