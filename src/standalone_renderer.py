@@ -102,6 +102,11 @@ class StandaloneRenderer:
             pass
 
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+        # Increase socket buffer sizes to prevent blocking
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1048576)  # 1MB receive buffer
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1048576)  # 1MB send buffer
+
         self.socket.bind(SOCKET_PATH)
         self.socket.listen(1)
 
@@ -111,6 +116,12 @@ class StandaloneRenderer:
     def accept_connection(self):
         """Accept connection from DOOM engine."""
         self.client_socket, _ = self.socket.accept()
+
+        # Set socket options for client connection
+        self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1048576)  # 1MB
+        self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1048576)  # 1MB
+        self.client_socket.settimeout(5.0)  # 5 second timeout to prevent infinite hangs
+
         print("✓ DOOM connected!")
 
         # Send INIT_COMPLETE
@@ -160,24 +171,33 @@ class StandaloneRenderer:
 
         try:
             while self.running:
-                msg_type, payload = self._receive_message()
+                try:
+                    msg_type, payload = self._receive_message()
 
-                if msg_type is None:
-                    print("Connection closed by DOOM")
-                    break
+                    if msg_type is None:
+                        print("Connection closed by DOOM")
+                        break
 
-                if msg_type == MSG_FRAME_DATA:
-                    # Update current frame
-                    with self.frame_lock:
-                        self.current_frame = payload
+                    if msg_type == MSG_FRAME_DATA:
+                        # Update current frame
+                        with self.frame_lock:
+                            self.current_frame = payload
 
-                elif msg_type == MSG_SHUTDOWN:
-                    print("Received shutdown from DOOM")
-                    self.running = False
-                    break
+                    elif msg_type == MSG_SHUTDOWN:
+                        print("Received shutdown from DOOM")
+                        self.running = False
+                        break
+
+                except socket.timeout:
+                    # Timeout is OK - just means no data yet, continue waiting
+                    continue
+                except Exception as e:
+                    print(f"ERROR receiving message: {e}")
+                    # Don't break on error - try to recover
+                    continue
 
         except Exception as e:
-            print(f"ERROR in receive loop: {e}")
+            print(f"FATAL ERROR in receive loop: {e}")
             import traceback
             traceback.print_exc()
         finally:

@@ -82,6 +82,11 @@ int doom_socket_connect(void) {
         return -1;
     }
 
+    /* Set large socket buffers to prevent blocking on large frame data */
+    int bufsize = 1048576;  /* 1MB buffer */
+    setsockopt(g_socket_fd, SOL_SOCKET, SO_SNDBUF, &bufsize, sizeof(bufsize));
+    setsockopt(g_socket_fd, SOL_SOCKET, SO_RCVBUF, &bufsize, sizeof(bufsize));
+
     /* Setup address */
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
