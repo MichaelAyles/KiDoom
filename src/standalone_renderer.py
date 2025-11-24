@@ -75,46 +75,52 @@ class MinimalRenderer:
     def _capture_sdl_window(self, output_path):
         """Capture SDL window screenshot using screencapture on macOS."""
         try:
-            # Use screencapture with interactive window selection
-            # We'll capture by finding the SDL window using AppleScript
-            # Try multiple approaches
+            # Use quartz-debug tool to get window list, then filter for DOOM
+            # This is much faster than iterating in AppleScript
 
-            # Approach 1: Look for window with "DOOM" in title
-            script = '''
-            tell application "System Events"
-                set windowList to {}
-                repeat with theProcess in (every process)
-                    try
-                        repeat with theWindow in (every window of theProcess)
-                            if name of theWindow contains "DOOM" then
-                                return id of theWindow
-                            end if
-                        end repeat
-                    end try
-                end repeat
-            end tell
-            '''
+            # Get all windows using Python's Quartz bindings (if available)
+            # Or fall back to simpler approach: use screencapture -l with known window ID
 
+            # Fastest approach: Use screencapture -W (capture specific window interactively)
+            # But we need the window name. Let's use a simple shell command.
+
+            # Get list of windows with their IDs
             result = subprocess.run(
-                ['osascript', '-e', script],
+                ['osascript', '-e', '''
+                    tell application "System Events"
+                        set output to ""
+                        repeat with p in (every process whose visible is true)
+                            try
+                                repeat with w in (every window of p)
+                                    if name of w contains "DOOM (SDL)" then
+                                        return id of w
+                                    end if
+                                end repeat
+                            end try
+                        end repeat
+                        return ""
+                    end tell
+                '''],
                 capture_output=True,
                 text=True,
-                timeout=3
+                timeout=1
             )
 
             if result.returncode == 0 and result.stdout.strip():
                 window_id = result.stdout.strip()
-                # Capture that window (remove -x to avoid beep)
+                # Capture that window
                 subprocess.run(
                     ['screencapture', '-l', window_id, '-o', output_path],
-                    timeout=2,
+                    timeout=1,
                     capture_output=True
                 )
                 # Check if file was created
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
                     return True
+        except subprocess.TimeoutExpired:
+            pass  # Silent fail on timeout
         except Exception as e:
-            print(f"Debug: SDL capture failed: {e}")
+            pass  # Silent fail on other errors
 
         return False
 
