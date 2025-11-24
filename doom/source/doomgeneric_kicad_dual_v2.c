@@ -37,6 +37,7 @@ extern int viewwidth;
 extern player_t players[MAXPLAYERS];
 extern int consoleplayer;
 extern fixed_t centeryfrac;
+extern fixed_t viewz;  /* Player eye-level Z coordinate */
 
 /* SDL state */
 SDL_Window* window = NULL;
@@ -163,10 +164,11 @@ static char* extract_vectors_to_json(size_t* out_len) {
         fixed_t ceiling_height = sector->ceilingheight;
         fixed_t floor_height = sector->floorheight;
 
-        fixed_t fy1_top = centeryfrac - FixedMul(ceiling_height, scale1);
-        fixed_t fy2_top = centeryfrac - FixedMul(ceiling_height, scale2);
-        fixed_t fy1_bottom = centeryfrac - FixedMul(floor_height, scale1);
-        fixed_t fy2_bottom = centeryfrac - FixedMul(floor_height, scale2);
+        /* Use heights RELATIVE to player's eye level (viewz) for correct projection */
+        fixed_t fy1_top = centeryfrac - FixedMul(ceiling_height - viewz, scale1);
+        fixed_t fy2_top = centeryfrac - FixedMul(ceiling_height - viewz, scale2);
+        fixed_t fy1_bottom = centeryfrac - FixedMul(floor_height - viewz, scale1);
+        fixed_t fy2_bottom = centeryfrac - FixedMul(floor_height - viewz, scale2);
 
         int y1_top = fy1_top >> FRACBITS;
         int y1_bottom = fy1_bottom >> FRACBITS;
@@ -223,8 +225,9 @@ static char* extract_vectors_to_json(size_t* out_len) {
 
         fixed_t gzt = vis->gzt;
         fixed_t gz = vis->gz;
-        fixed_t fy_top = centeryfrac - FixedMul(gzt, sprite_scale);
-        fixed_t fy_bottom = centeryfrac - FixedMul(gz, sprite_scale);
+        /* Use heights RELATIVE to player's eye level (viewz) for correct projection */
+        fixed_t fy_top = centeryfrac - FixedMul(gzt - viewz, sprite_scale);
+        fixed_t fy_bottom = centeryfrac - FixedMul(gz - viewz, sprite_scale);
 
         int y_top = fy_top >> FRACBITS;
         int y_bottom = fy_bottom >> FRACBITS;
