@@ -24,9 +24,18 @@ SOCKET_RECV_TIMEOUT = 1.0
 # ============================================================================
 
 # Maximum number of wall traces per frame
-# Typical DOOM frame: 100-300 wall segments
-# We pre-allocate enough for worst-case scenarios
-MAX_WALL_TRACES = 500
+# WIREFRAME MODE: Each wall = 4 edges (top, bottom, left, right)
+# Typical DOOM frame: 30-70 walls x 4 edges = 120-280 traces
+# Entities: 10 entities x 4 edges = 40 traces
+# Total: ~320 traces per frame
+# We pre-allocate 500 for safety margin
+# Temporarily reduced to 100 for faster startup during testing
+MAX_WALL_TRACES = 100
+
+# Wireframe rendering parameters
+EDGES_PER_WALL = 4  # Top, bottom, left, right edges
+MAX_WALLS_PER_FRAME = 70  # Typical max walls visible
+MAX_ENTITIES_PER_FRAME = 10  # Typical max entities visible
 
 # Maximum number of entities (player + enemies)
 # Typical: 1 player + 5-15 enemies
@@ -48,7 +57,7 @@ DOOM_WIDTH = 320
 DOOM_HEIGHT = 200
 
 # Scale factor: DOOM pixels to millimeters
-# 0.5mm per pixel = 160mm × 100mm PCB for full screen
+# 0.5mm per pixel = 160mm x 100mm PCB for full screen
 DOOM_TO_MM = 0.5
 
 # Millimeters to nanometers (KiCad internal units)
@@ -193,9 +202,9 @@ def get_footprint_library_path():
 # ============================================================================
 
 # Message types for socket communication
-MSG_FRAME_DATA = 0x01      # DOOM → Python: Frame rendering data
-MSG_KEY_EVENT = 0x02       # Python → DOOM: Keyboard event
-MSG_INIT_COMPLETE = 0x03   # Python → DOOM: Initialization complete
+MSG_FRAME_DATA = 0x01      # DOOM -> Python: Frame rendering data
+MSG_KEY_EVENT = 0x02       # Python -> DOOM: Keyboard event
+MSG_INIT_COMPLETE = 0x03   # Python -> DOOM: Initialization complete
 MSG_SHUTDOWN = 0x04        # Bidirectional: Request shutdown
 
 # ============================================================================

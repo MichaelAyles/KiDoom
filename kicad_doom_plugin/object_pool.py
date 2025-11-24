@@ -60,7 +60,12 @@ class TracePool:
             self.traces.append(track)
 
         if DEBUG_MODE:
-            print(f"✓ TracePool created with {len(self.traces)} traces")
+            print(f"[OK] TracePool created with {len(self.traces)} traces")
+
+    @property
+    def objects(self):
+        """Alias for traces list (for consistent interface)."""
+        return self.traces
 
     def get(self, index):
         """
@@ -168,7 +173,7 @@ class FootprintPool:
 
         if DEBUG_MODE:
             total = sum(len(fps) for fps in self.footprints.values())
-            print(f"✓ FootprintPool created with {total} footprints across "
+            print(f"[OK] FootprintPool created with {total} footprints across "
                   f"{len(self.footprints)} types")
 
     def get(self, index, entity_type):
@@ -249,7 +254,7 @@ class ViaPool:
             self.vias.append(via)
 
         if DEBUG_MODE:
-            print(f"✓ ViaPool created with {len(self.vias)} vias")
+            print(f"[OK] ViaPool created with {len(self.vias)} vias")
 
     def get(self, index):
         """
@@ -320,7 +325,7 @@ class TextPool:
             self.texts.append(text)
 
         if DEBUG_MODE:
-            print(f"✓ TextPool created with {len(self.texts)} text elements")
+            print(f"[OK] TextPool created with {len(self.texts)} text elements")
 
     def get(self, index):
         """
@@ -377,7 +382,7 @@ def create_all_pools(board):
 
     if DEBUG_MODE:
         print("=" * 70)
-        print("✓ All object pools initialized")
+        print("[OK] All object pools initialized")
         print("=" * 70 + "\n")
 
     return pools

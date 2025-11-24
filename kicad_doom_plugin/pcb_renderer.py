@@ -2,10 +2,10 @@
 Core PCB renderer for DOOM frames.
 
 Converts DOOM frame data (walls, entities, projectiles, HUD) into PCB elements:
-- Wall segments → PCB_TRACK (copper traces)
-- Entities → FOOTPRINT (real components)
-- Projectiles → PCB_VIA (drilled holes)
-- HUD → PCB_TEXT (silkscreen text)
+- Wall segments -> PCB_TRACK (copper traces)
+- Entities -> FOOTPRINT (real components)
+- Projectiles -> PCB_VIA (drilled holes)
+- HUD -> PCB_TEXT (silkscreen text)
 
 Performance: Benchmarked at 82.6 FPS on M1 MacBook Pro
 Expected gameplay: 40-60 FPS with full DOOM engine
@@ -65,7 +65,7 @@ class DoomPCBRenderer:
         # This eliminates ratsnest (airwire) calculation overhead
         print("Creating shared DOOM net...")
         self.doom_net = self._create_doom_net()
-        print(f"✓ Created net: {self.doom_net.GetNetname()}")
+        print(f"[OK] Created net: {self.doom_net.GetNetname()}")
 
         # Create object pools (pre-allocate all PCB objects)
         print("\nCreating object pools...")
@@ -88,7 +88,7 @@ class DoomPCBRenderer:
         # Refresh timer (runs on main thread)
         self.refresh_timer = None
 
-        print("\n✓ Renderer initialized")
+        print("\n[OK] Renderer initialized")
         print("=" * 70 + "\n")
 
     def _create_doom_net(self):
@@ -156,11 +156,16 @@ class DoomPCBRenderer:
         try:
             # 1. Render walls (most objects, highest priority)
             walls = frame_data.get('walls', [])
-            self._render_walls(walls)
+            wall_trace_count = self._render_walls(walls)
 
             # 2. Render entities (player, enemies)
             entities = frame_data.get('entities', [])
-            self._render_entities(entities)
+            entity_trace_count = self._render_entities(entities, wall_trace_count)
+
+            # Hide all unused traces (both walls and entities share the pool)
+            trace_pool = self.pools['traces']
+            total_traces = wall_trace_count + entity_trace_count
+            trace_pool.hide_unused(total_traces)
 
             # 3. Render projectiles (bullets, fireballs)
             projectiles = frame_data.get('projectiles', [])
@@ -204,109 +209,166 @@ class DoomPCBRenderer:
 
     def _render_walls(self, walls):
         """
-        Render wall segments as PCB traces.
+        Render wall segments as wireframe PCB traces.
 
-        Each wall becomes a PCB_TRACK object. Distance from player
-        determines layer (F.Cu/B.Cu) and width (thick/thin).
+        Each wall becomes 4 PCB_TRACK objects (wireframe box):
+        - Top edge: (x1, y1_top) -> (x2, y2_top)
+        - Bottom edge: (x1, y1_bottom) -> (x2, y2_bottom)
+        - Left edge: (x1, y1_top) -> (x1, y1_bottom)
+        - Right edge: (x2, y2_top) -> (x2, y2_bottom)
+
+        Distance from player determines layer (F.Cu/B.Cu) and width.
 
         Args:
-            walls: List of (x1, y1, x2, y2, distance) tuples
+            walls: List of [x1, y1_top, y1_bottom, x2, y2_top, y2_bottom, distance, silhouette]
+
+        Returns:
+            int: Number of traces used for walls
         """
         trace_pool = self.pools['traces']
         trace_index = 0
 
         for wall in walls:
-            if len(wall) < 5:
-                continue  # Invalid wall data
+            if len(wall) < 8:
+                continue  # Invalid wall data (need wireframe format)
 
-            x1, y1, x2, y2, distance = wall[:5]
+            x1, y1_top, y1_bottom, x2, y2_top, y2_bottom, distance, silhouette = wall[:8]
 
-            # Get trace from pool (reuse existing object)
-            try:
+            # Skip portal walls (silhouette=0) - these are openings, not solid walls
+            if silhouette == 0:
+                continue
+
+            # Define 4 edges of wireframe box
+            edges = [
+                (x1, y1_top, x2, y2_top),          # Top edge
+                (x1, y1_bottom, x2, y2_bottom),    # Bottom edge
+                (x1, y1_top, x1, y1_bottom),       # Left edge
+                (x2, y2_top, x2, y2_bottom)        # Right edge
+            ]
+
+            # Render each edge as a separate trace
+            for (sx, sy, ex, ey) in edges:
+                # Check pool capacity
+                if trace_index >= len(trace_pool.objects):
+                    if DEBUG_MODE:
+                        print(f"WARNING: Trace pool exhausted at {trace_index}")
+                    break
+
+                # Get trace from pool (reuse existing object)
                 trace = trace_pool.get(trace_index)
-            except IndexError:
-                # Pool exhausted, skip remaining walls
-                if DEBUG_MODE:
-                    print(f"WARNING: Trace pool exhausted at {trace_index}")
-                break
+                trace_index += 1
 
-            trace_index += 1
+                # Convert DOOM coordinates to KiCad coordinates
+                kicad_sx, kicad_sy = CoordinateTransform.doom_to_kicad(sx, sy)
+                kicad_ex, kicad_ey = CoordinateTransform.doom_to_kicad(ex, ey)
 
-            # Convert DOOM coordinates to KiCad coordinates
-            kicad_x1, kicad_y1 = CoordinateTransform.doom_to_kicad(x1, y1)
-            kicad_x2, kicad_y2 = CoordinateTransform.doom_to_kicad(x2, y2)
+                # Update trace geometry
+                trace.SetStart(pcbnew.VECTOR2I(kicad_sx, kicad_sy))
+                trace.SetEnd(pcbnew.VECTOR2I(kicad_ex, kicad_ey))
 
-            # Update trace geometry
-            trace.SetStart(pcbnew.VECTOR2I(kicad_x1, kicad_y1))
-            trace.SetEnd(pcbnew.VECTOR2I(kicad_x2, kicad_y2))
-
-            # Encode distance as layer and width
-            # Close walls: F.Cu (red), thick traces (bright)
-            # Far walls: B.Cu (cyan), thin traces (dim)
-            if distance < DISTANCE_THRESHOLD:
-                trace.SetLayer(pcbnew.F_Cu)
-                trace.SetWidth(TRACE_WIDTH_CLOSE)
-            else:
+                # Encode distance as width only
+                # All walls are blue (B.Cu) for consistency
+                # Close walls: thick traces (bright)
+                # Far walls: thin traces (dim)
                 trace.SetLayer(pcbnew.B_Cu)
-                trace.SetWidth(TRACE_WIDTH_FAR)
+                if distance < DISTANCE_THRESHOLD:
+                    trace.SetWidth(TRACE_WIDTH_CLOSE)
+                else:
+                    trace.SetWidth(TRACE_WIDTH_FAR)
 
-            # Set net (required for electrical authenticity)
-            trace.SetNet(self.doom_net)
+                # Set net (required for electrical authenticity)
+                trace.SetNet(self.doom_net)
 
-        # Hide unused traces (set width to 0)
-        trace_pool.hide_unused(trace_index)
+        # Return number of traces used (caller will hide unused traces after entities)
+        return trace_index
 
-    def _render_entities(self, entities):
+    def _render_entities(self, entities, start_index):
         """
-        Render player and enemies as footprints.
+        Render player and enemies as wireframe rectangles.
 
-        Each entity becomes a real KiCad footprint (component).
-        Different entity types use different footprints for visual distinction.
+        Each entity becomes 4 PCB_TRACK objects (wireframe box):
+        - Top edge: (x_left, y_top) -> (x_right, y_top)
+        - Bottom edge: (x_left, y_bottom) -> (x_right, y_bottom)
+        - Left edge: (x_left, y_top) -> (x_left, y_bottom)
+        - Right edge: (x_right, y_top) -> (x_right, y_bottom)
+
+        Entities use consistent styling (always F.Cu, thicker traces) to distinguish
+        from walls.
 
         Args:
-            entities: List of (x, y, type, angle) tuples
+            entities: List of dicts with keys: x, y_top, y_bottom, height, type, distance
+                     OR legacy format: (x, y, type, angle) tuples
+            start_index: Index in trace pool where entity traces start (after walls)
+
+        Returns:
+            int: Number of traces used for entities
         """
-        footprint_pool = self.pools['footprints']
-        footprint_index = 0
+        trace_pool = self.pools['traces']
+        trace_index = start_index
+        traces_used = 0
 
         for entity in entities:
-            if len(entity) < 4:
-                continue  # Invalid entity data
+            # Check if this is wireframe format (dict) or legacy format (tuple)
+            if isinstance(entity, dict):
+                # Wireframe format: {"x": X, "y_top": Yt, "y_bottom": Yb, "height": H, "type": T, "distance": D}
+                x = entity.get('x', 0)
+                y_top = entity.get('y_top', 0)
+                y_bottom = entity.get('y_bottom', 0)
+                height = entity.get('height', 16)  # Default sprite width (DOOM units)
+                distance = entity.get('distance', 0)
 
-            x, y, entity_type, angle = entity[:4]
+                # Calculate rectangle corners
+                # Entity width is centered on x coordinate
+                half_width = height / 2
+                x_left = x - half_width
+                x_right = x + half_width
 
-            # Get footprint from pool
-            footprint = footprint_pool.get(footprint_index, entity_type)
-            if not footprint:
-                continue  # Footprint pool not available
+                # Define 4 edges of wireframe box
+                edges = [
+                    (x_left, y_top, x_right, y_top),      # Top edge
+                    (x_left, y_bottom, x_right, y_bottom), # Bottom edge
+                    (x_left, y_top, x_left, y_bottom),    # Left edge
+                    (x_right, y_top, x_right, y_bottom)   # Right edge
+                ]
 
-            footprint_index += 1
+                # Render each edge as a separate trace
+                for (sx, sy, ex, ey) in edges:
+                    # Check pool capacity
+                    if trace_index >= len(trace_pool.objects):
+                        if DEBUG_MODE:
+                            print(f"WARNING: Trace pool exhausted at {trace_index} (entities)")
+                        break
 
-            # Convert coordinates
-            kicad_x, kicad_y = CoordinateTransform.doom_to_kicad(x, y)
+                    # Get trace from pool (reuse existing object)
+                    trace = trace_pool.get(trace_index)
+                    trace_index += 1
+                    traces_used += 1
 
-            # Update position
-            footprint.SetPosition(pcbnew.VECTOR2I(kicad_x, kicad_y))
+                    # Convert DOOM coordinates to KiCad coordinates
+                    kicad_sx, kicad_sy = CoordinateTransform.doom_to_kicad(sx, sy)
+                    kicad_ex, kicad_ey = CoordinateTransform.doom_to_kicad(ex, ey)
 
-            # Update rotation (DOOM angle to KiCad angle)
-            # DOOM angles: 0 = east, 90 = north (counterclockwise)
-            # KiCad angles: 0 = east, 90 = north (counterclockwise)
-            # They match! Just need to convert to KiCad's EDA_ANGLE
-            try:
-                footprint.SetOrientation(
-                    pcbnew.EDA_ANGLE(angle, pcbnew.DEGREES_T)
-                )
-            except AttributeError:
-                # KiCad 5 compatibility (uses decidegrees)
-                footprint.SetOrientation(int(angle * 10))
+                    # Update trace geometry
+                    trace.SetStart(pcbnew.VECTOR2I(kicad_sx, kicad_sy))
+                    trace.SetEnd(pcbnew.VECTOR2I(kicad_ex, kicad_ey))
 
-            # Ensure footprint is on correct layer
-            layer_set = pcbnew.LSET()
-            layer_set.addLayer(pcbnew.F_Cu)
-            footprint.SetLayerSet(layer_set)
+                    # Entities always use F.Cu layer (consistent visibility)
+                    # Use slightly thicker traces than walls to distinguish entities
+                    trace.SetLayer(pcbnew.F_Cu)
+                    trace.SetWidth(TRACE_WIDTH_CLOSE)  # Always bright/thick for entities
 
-        # Hide unused footprints (move off-screen)
-        footprint_pool.hide_unused(footprint_index)
+                    # Set net (required for electrical authenticity)
+                    trace.SetNet(self.doom_net)
+
+            else:
+                # Legacy format: (x, y, type, angle) - not supported in wireframe mode
+                # This is only for backwards compatibility during migration
+                if DEBUG_MODE:
+                    print(f"WARNING: Legacy entity format not supported in wireframe mode")
+                continue
+
+        # Return number of traces used for entities
+        return traces_used
 
     def _render_projectiles(self, projectiles):
         """
@@ -496,7 +558,7 @@ class DoomPCBRenderer:
         self.refresh_timer.Bind(wx.EVT_TIMER, self._on_refresh_timer)
         self.refresh_timer.Start(interval_ms)
 
-        print(f"✓ Started refresh timer ({1000/interval_ms:.1f} FPS max)")
+        print(f"[OK] Started refresh timer ({1000/interval_ms:.1f} FPS max)")
 
     def _on_refresh_timer(self, event):
         """
@@ -541,7 +603,7 @@ class DoomPCBRenderer:
         if self.refresh_timer:
             self.refresh_timer.Stop()
             self.refresh_timer = None
-            print("✓ Stopped refresh timer")
+            print("[OK] Stopped refresh timer")
 
     def cleanup(self):
         """
@@ -581,4 +643,4 @@ class DoomPCBRenderer:
                   f"({stats['slow_frame_count']/stats['frame_count']*100:.1f}%)")
             print("=" * 70)
 
-        print("✓ Renderer cleaned up")
+        print("[OK] Renderer cleaned up")
