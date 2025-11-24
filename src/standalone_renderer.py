@@ -58,9 +58,17 @@ class MinimalRenderer:
         self.last_fps_time = None
         self.last_screenshot_time = None
 
-        # Create framebuffer directory
+        # Create framebuffer directory and clear old screenshots
         self.framebuffer_dir = "framebuffer"
+        self._clear_framebuffer()
         os.makedirs(self.framebuffer_dir, exist_ok=True)
+
+    def _clear_framebuffer(self):
+        """Clear all existing screenshots from framebuffer directory."""
+        if os.path.exists(self.framebuffer_dir):
+            import shutil
+            shutil.rmtree(self.framebuffer_dir)
+            print(f"✓ Cleared old screenshots from {self.framebuffer_dir}/")
 
     def init_pygame(self):
         pygame.init()
