@@ -303,8 +303,12 @@ class MinimalRenderer:
             if isinstance(wall, list) and len(wall) >= 8:
                 distance = wall[6]
                 silhouette = wall[7]
-                # Skip portal walls (silhouette=0) - these are openings, not solid walls
-                if silhouette == 0:
+                # Only render full solid walls (silhouette=3)
+                # silhouette=0: portal/opening (skip)
+                # silhouette=1: lower wall only (partial - skip for clean wireframe)
+                # silhouette=2: upper wall only (partial - skip for clean wireframe)
+                # silhouette=3: full solid wall (render)
+                if silhouette != 3:
                     continue
                 walls_list.append(('wall', distance, wall))
 
