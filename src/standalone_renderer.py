@@ -75,26 +75,47 @@ class MinimalRenderer:
     def _capture_sdl_window(self, output_path):
         """Capture SDL window screenshot using screencapture on macOS."""
         try:
-            # Use screencapture to grab SDL window by name
-            # -l captures specific window by ID
-            # First, get window ID for "DOOM (SDL)"
+            # Use screencapture with interactive window selection
+            # We'll capture by finding the SDL window using AppleScript
+            # Try multiple approaches
+
+            # Approach 1: Look for window with "DOOM" in title
+            script = '''
+            tell application "System Events"
+                set windowList to {}
+                repeat with theProcess in (every process)
+                    try
+                        repeat with theWindow in (every window of theProcess)
+                            if name of theWindow contains "DOOM" then
+                                return id of theWindow
+                            end if
+                        end repeat
+                    end try
+                end repeat
+            end tell
+            '''
+
             result = subprocess.run(
-                ['osascript', '-e', 'tell application "System Events" to get the id of (first window of (first process whose name contains "doomgeneric_kicad"))'],
+                ['osascript', '-e', script],
                 capture_output=True,
                 text=True,
-                timeout=2
+                timeout=3
             )
 
             if result.returncode == 0 and result.stdout.strip():
                 window_id = result.stdout.strip()
-                # Capture that window
+                # Capture that window (remove -x to avoid beep)
                 subprocess.run(
-                    ['screencapture', '-l', window_id, '-x', output_path],
-                    timeout=2
+                    ['screencapture', '-l', window_id, '-o', output_path],
+                    timeout=2,
+                    capture_output=True
                 )
-                return True
+                # Check if file was created
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                    return True
         except Exception as e:
-            print(f"Warning: Could not capture SDL window: {e}")
+            print(f"Debug: SDL capture failed: {e}")
+
         return False
 
     def _combine_screenshots(self, python_path, sdl_path, combined_path):
