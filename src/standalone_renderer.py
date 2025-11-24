@@ -42,13 +42,13 @@ SCREEN_HEIGHT = 800
 DOOM_WIDTH = 320
 DOOM_HEIGHT = 200
 
-# Color scheme (PCB-like)
-COLOR_BACKGROUND = (20, 20, 30)  # Dark blue-gray
-COLOR_WALL_FCU = (200, 120, 50)  # Copper color (front layer)
-COLOR_WALL_BCU = (50, 150, 200)  # Blue (back layer)
-COLOR_ENTITY = (255, 220, 100)   # Gold (components)
-COLOR_PROJECTILE = (255, 50, 50) # Red (vias/projectiles)
-COLOR_HUD = (200, 200, 200)      # White (silkscreen text)
+# Color scheme - High contrast for visibility
+COLOR_BACKGROUND = (10, 10, 20)   # Very dark blue
+COLOR_WALL_CLOSE = (255, 200, 100)  # Bright orange for close walls
+COLOR_WALL_FAR = (80, 120, 180)     # Blue-gray for distant walls
+COLOR_ENTITY = (255, 220, 100)      # Gold (components)
+COLOR_PROJECTILE = (255, 50, 50)    # Red (vias/projectiles)
+COLOR_HUD = (200, 200, 200)         # White (silkscreen text)
 
 
 class StandaloneRenderer:
@@ -226,9 +226,13 @@ class StandaloneRenderer:
                         x2_screen, y2_top_screen = self.doom_to_screen(x2, y2_top)
                         _, y2_bottom_screen = self.doom_to_screen(x2, y2_bottom)
 
-                        # Color based on depth
-                        brightness = max(50, min(255, 255 - distance // 4))
-                        color = (brightness, brightness // 2, brightness // 3)
+                        # Color based on depth - interpolate between close and far colors
+                        # Closer walls = brighter orange, distant walls = blue-gray
+                        t = min(1.0, max(0.0, distance / 200.0))  # Normalize distance
+                        r = int(COLOR_WALL_CLOSE[0] * (1-t) + COLOR_WALL_FAR[0] * t)
+                        g = int(COLOR_WALL_CLOSE[1] * (1-t) + COLOR_WALL_FAR[1] * t)
+                        b = int(COLOR_WALL_CLOSE[2] * (1-t) + COLOR_WALL_FAR[2] * t)
+                        color = (r, g, b)
 
                         # Width based on distance
                         width = max(1, min(5, 300 // max(distance, 1)))
@@ -248,8 +252,12 @@ class StandaloneRenderer:
                         x1_screen, y1_screen = self.doom_to_screen(x1, y1)
                         x2_screen, y2_screen = self.doom_to_screen(x2, y2)
 
-                        brightness = max(50, min(255, 255 - distance // 4))
-                        color = (brightness, brightness // 2, brightness // 3)
+                        # Color based on depth - same interpolation
+                        t = min(1.0, max(0.0, distance / 200.0))
+                        r = int(COLOR_WALL_CLOSE[0] * (1-t) + COLOR_WALL_FAR[0] * t)
+                        g = int(COLOR_WALL_CLOSE[1] * (1-t) + COLOR_WALL_FAR[1] * t)
+                        b = int(COLOR_WALL_CLOSE[2] * (1-t) + COLOR_WALL_FAR[2] * t)
+                        color = (r, g, b)
                         width = max(1, min(5, 300 // max(distance, 1)))
 
                         pygame.draw.line(self.screen, color, (x1_screen, y1_screen),
@@ -265,8 +273,12 @@ class StandaloneRenderer:
                     x1_screen, y1_screen = self.doom_to_screen(x1, y1)
                     x2_screen, y2_screen = self.doom_to_screen(x2, y2)
 
-                    brightness = max(50, min(255, 255 - distance // 4))
-                    color = (brightness, brightness // 2, brightness // 3)
+                    # Color based on depth - same interpolation
+                    t = min(1.0, max(0.0, distance / 200.0))
+                    r = int(COLOR_WALL_CLOSE[0] * (1-t) + COLOR_WALL_FAR[0] * t)
+                    g = int(COLOR_WALL_CLOSE[1] * (1-t) + COLOR_WALL_FAR[1] * t)
+                    b = int(COLOR_WALL_CLOSE[2] * (1-t) + COLOR_WALL_FAR[2] * t)
+                    color = (r, g, b)
                     width = max(1, min(5, 300 // max(distance, 1)))
 
                     pygame.draw.line(self.screen, color, (x1_screen, y1_screen),
