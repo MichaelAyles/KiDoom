@@ -211,23 +211,51 @@ class MinimalRenderer:
                 x2_s, y2t_s = self.doom_to_screen(x2, y2_top)
                 _, y2b_s = self.doom_to_screen(x2, y2_bottom)
 
+                # Also get screen bottom (for floor) and top (for ceiling)
+                _, screen_bottom = self.doom_to_screen(0, DOOM_HEIGHT)
+                _, screen_top = self.doom_to_screen(0, 0)
+
                 # Color based on distance (depth cueing)
                 t = min(1.0, distance / 500.0)
                 brightness = int(255 * (1.0 - t * 0.7))
-                color = (0, brightness, 0)
 
-                # Draw FILLED polygon
-                points = [
+                # CEILING: from screen top down to wall top
+                # Draw darker than walls
+                ceiling_brightness = int(brightness * 0.3)
+                ceiling_color = (0, ceiling_brightness, ceiling_brightness)  # Cyan tint
+                ceiling_points = [
+                    (x1_s, screen_top),     # Top left
+                    (x1_s, y1t_s),          # Wall top left
+                    (x2_s, y2t_s),          # Wall top right
+                    (x2_s, screen_top)      # Top right
+                ]
+                pygame.draw.polygon(self.screen, ceiling_color, ceiling_points, 0)
+
+                # FLOOR: from wall bottom down to screen bottom
+                # Draw darker than walls
+                floor_brightness = int(brightness * 0.4)
+                floor_color = (floor_brightness, floor_brightness, 0)  # Brown/yellow tint
+                floor_points = [
+                    (x1_s, y1b_s),          # Wall bottom left
+                    (x1_s, screen_bottom),  # Bottom left
+                    (x2_s, screen_bottom),  # Bottom right
+                    (x2_s, y2b_s)           # Wall bottom right
+                ]
+                pygame.draw.polygon(self.screen, floor_color, floor_points, 0)
+
+                # WALL: main wall polygon (brightest)
+                wall_color = (0, brightness, 0)
+                wall_points = [
                     (x1_s, y1t_s),
                     (x1_s, y1b_s),
                     (x2_s, y2b_s),
                     (x2_s, y2t_s)
                 ]
-                pygame.draw.polygon(self.screen, color, points, 0)
+                pygame.draw.polygon(self.screen, wall_color, wall_points, 0)
 
-                # Draw darker outline for definition
+                # Draw darker outline for wall definition
                 outline_color = (0, max(0, brightness - 50), 0)
-                pygame.draw.polygon(self.screen, outline_color, points, 1)
+                pygame.draw.polygon(self.screen, outline_color, wall_points, 1)
 
             elif obj_type == 'sprite':
                 # Draw sprite
