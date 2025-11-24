@@ -14,6 +14,9 @@ Expected gameplay: 40-60 FPS with full DOOM engine
 import pcbnew
 import time
 import gc
+import wx
+import threading
+import queue
 
 from .config import (
     DISTANCE_THRESHOLD, TRACE_WIDTH_CLOSE, TRACE_WIDTH_FAR,
@@ -30,10 +33,17 @@ class DoomPCBRenderer:
 
     This is the performance-critical component - called 20-60 times per second.
 
+    THREAD SAFETY:
+    - render_frame() can be called from any thread (updates PCB objects)
+    - Refresh() is called ONLY from main thread via wx.Timer
+    - This prevents macOS threading crashes
+
     Usage:
         renderer = DoomPCBRenderer(board)
-        renderer.render_frame(frame_data)
+        renderer.start_refresh_timer()  # Start automatic refresh on main thread
+        renderer.render_frame(frame_data)  # Can be called from background thread
         # ... repeat for each frame ...
+        renderer.stop_refresh_timer()
         renderer.cleanup()
     """
 
@@ -71,6 +81,13 @@ class DoomPCBRenderer:
         # Last HUD update frame (for throttling)
         self.last_hud_update = 0
 
+        # Thread safety: Queue for frame data from background thread
+        # Background thread pushes frame data, main thread pops and renders
+        self.frame_queue = queue.Queue(maxsize=2)  # Small queue to avoid lag
+
+        # Refresh timer (runs on main thread)
+        self.refresh_timer = None
+
         print("\n✓ Renderer initialized")
         print("=" * 70 + "\n")
 
@@ -92,9 +109,12 @@ class DoomPCBRenderer:
 
     def render_frame(self, frame_data):
         """
-        Render a complete DOOM frame to PCB.
+        Queue frame data for rendering on main thread.
 
-        This is the hot path - called 20-60 times per second.
+        CRITICAL: This is called from a BACKGROUND THREAD (doom_bridge receive loop).
+        On macOS, we CANNOT modify PCB objects from background threads - it crashes!
+
+        Instead, we queue the frame data and let the main thread timer process it.
 
         Args:
             frame_data: Dictionary containing:
@@ -102,15 +122,35 @@ class DoomPCBRenderer:
                 entities: List of entities [(x, y, type, angle), ...]
                 projectiles: List of projectiles [(x, y), ...]
                 hud: Dictionary with HUD elements
+        """
+        try:
+            # Try to add frame to queue (non-blocking)
+            # If queue is full, drop oldest frame (keep most recent)
+            try:
+                self.frame_queue.put_nowait(frame_data)
+            except queue.Full:
+                # Queue full - drop old frame, add new one
+                try:
+                    self.frame_queue.get_nowait()  # Remove oldest
+                    self.frame_queue.put_nowait(frame_data)  # Add newest
+                except:
+                    pass  # Queue operations failed, skip this frame
 
-        Performance breakdown (M1 MacBook Pro):
-            - Trace updates: 0.44ms (3.6%)
-            - Display refresh: 11.67ms (96.3%)
-            - Total: 12.11ms (82.6 FPS)
+        except Exception as e:
+            if DEBUG_MODE:
+                print(f"ERROR: Failed to queue frame: {e}")
+
+    def _process_frame(self, frame_data):
+        """
+        Actually process and render frame data to PCB.
+
+        CRITICAL: This MUST be called from MAIN THREAD only!
+        Called by timer callback (_on_refresh_timer).
+
+        Args:
+            frame_data: Dictionary with walls, entities, projectiles, hud
         """
         frame_start = time.time()
-
-        # Update PCB objects
         update_start = time.time()
 
         try:
@@ -141,12 +181,6 @@ class DoomPCBRenderer:
 
         update_time = time.time() - update_start
         self.total_update_time += update_time
-
-        # 5. Refresh display (this is the bottleneck)
-        refresh_start = time.time()
-        pcbnew.Refresh()
-        refresh_time = time.time() - refresh_start
-        self.total_refresh_time += refresh_time
 
         # Update statistics
         total_time = time.time() - frame_start
@@ -443,6 +477,72 @@ class DoomPCBRenderer:
             'slow_frame_count': self.slow_frame_count,
         }
 
+    def start_refresh_timer(self, interval_ms=33):
+        """
+        Start a timer that calls Refresh() on the main thread.
+
+        This MUST be called from the main thread (where wx event loop runs).
+        The timer will call pcbnew.Refresh() at regular intervals.
+
+        Args:
+            interval_ms: Refresh interval in milliseconds (default: 33ms = ~30 FPS)
+        """
+        if self.refresh_timer:
+            print("WARNING: Refresh timer already running")
+            return
+
+        # Create and start timer (must be on main thread)
+        self.refresh_timer = wx.Timer()
+        self.refresh_timer.Bind(wx.EVT_TIMER, self._on_refresh_timer)
+        self.refresh_timer.Start(interval_ms)
+
+        print(f"✓ Started refresh timer ({1000/interval_ms:.1f} FPS max)")
+
+    def _on_refresh_timer(self, event):
+        """
+        Timer callback - runs on MAIN THREAD.
+
+        Processes queued frames and refreshes display.
+        This is where ALL PCB modifications happen (thread-safe).
+        """
+        # Check if there's a frame to process
+        try:
+            # Get frame from queue (non-blocking)
+            frame_data = self.frame_queue.get_nowait()
+
+            # Process frame on main thread (safe!)
+            self._process_frame(frame_data)
+
+            # Refresh display after updating PCB objects
+            refresh_start = time.time()
+            try:
+                pcbnew.Refresh()
+            except Exception as e:
+                if DEBUG_MODE:
+                    print(f"ERROR: Refresh failed: {e}")
+            refresh_time = time.time() - refresh_start
+            self.total_refresh_time += refresh_time
+
+        except queue.Empty:
+            # No frame available - that's okay, just wait for next timer event
+            pass
+        except Exception as e:
+            if DEBUG_MODE:
+                print(f"ERROR: Timer callback failed: {e}")
+                import traceback
+                traceback.print_exc()
+
+    def stop_refresh_timer(self):
+        """
+        Stop the refresh timer.
+
+        Safe to call multiple times or if timer not running.
+        """
+        if self.refresh_timer:
+            self.refresh_timer.Stop()
+            self.refresh_timer = None
+            print("✓ Stopped refresh timer")
+
     def cleanup(self):
         """
         Cleanup renderer and hide all objects.
@@ -451,6 +551,9 @@ class DoomPCBRenderer:
         """
         print("\nCleaning up renderer...")
 
+        # Stop refresh timer first
+        self.stop_refresh_timer()
+
         # Hide all objects
         for pool_name, pool in self.pools.items():
             try:
@@ -458,7 +561,7 @@ class DoomPCBRenderer:
             except:
                 pass
 
-        # Final refresh
+        # Final refresh (safe to call directly if on main thread, or skip if not)
         try:
             pcbnew.Refresh()
         except:

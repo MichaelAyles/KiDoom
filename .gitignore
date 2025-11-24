@@ -72,7 +72,9 @@ gerber/
 *.a
 *.out
 doom/doomgeneric_kicad
+doom/doomgeneric_kicad_dual
 doom/source/*.o
+doom/source/build/
 doomgeneric/
 
 # DOOM WAD files (only commit shareware)

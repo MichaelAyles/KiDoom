@@ -46,6 +46,8 @@ class DoomKiCadPlugin(pcbnew.ActionPlugin):
         self.category = "Game"
         self.description = "Run DOOM using PCB traces as the rendering medium"
         self.show_toolbar_button = True
+        # Test mode flag - set to True to run smiley test instead of DOOM
+        self.test_mode = os.environ.get('KIDOOM_TEST_MODE', '').lower() == 'true'
         # Icon is optional - KiCad will use default if not found
         icon_path = os.path.join(os.path.dirname(__file__), 'doom_icon.png')
         if os.path.exists(icon_path):
@@ -62,6 +64,11 @@ class DoomKiCadPlugin(pcbnew.ActionPlugin):
 
         if not board:
             self._show_error("No board loaded!")
+            return
+
+        # Check if we're in test mode
+        if self.test_mode:
+            self._run_smiley_test(board)
             return
 
         print("\n" + "=" * 70)
@@ -117,6 +124,17 @@ class DoomKiCadPlugin(pcbnew.ActionPlugin):
                 traceback.print_exc()
             self._show_error(f"Failed to create renderer:\n{e}")
             return
+
+        # Start refresh timer on main thread (CRITICAL for macOS thread safety)
+        print("\n" + "=" * 70)
+        print("Starting Refresh Timer")
+        print("=" * 70)
+        try:
+            # 33ms = ~30 FPS max refresh rate
+            renderer.start_refresh_timer(interval_ms=33)
+        except Exception as e:
+            print(f"\nWARNING: Failed to start refresh timer: {e}")
+            print("Rendering may not work properly!")
 
         # Create bridge (socket server)
         print("\n" + "=" * 70)
@@ -274,6 +292,246 @@ class DoomKiCadPlugin(pcbnew.ActionPlugin):
             print("\n" + "=" * 70)
             print("DOOM on PCB - Session Complete")
             print("=" * 70 + "\n")
+
+    def _run_smiley_test(self, board):
+        """
+        Run simple smiley face test to verify timer-based rendering works.
+
+        This test uses the same timer architecture as DOOM but without any
+        background threads, to isolate whether the basic approach works on macOS.
+        """
+        import wx
+        import math
+
+        print("\n" + "=" * 70)
+        print("SMILEY FACE TEST - Timer-Based Rendering")
+        print("=" * 70)
+
+        # Create smiley renderer
+        class SmileyRenderer:
+            def __init__(self, board):
+                self.board = board
+                self.timer = None
+                self.angle = 0
+                self.frame = 0
+                self.traces = []
+
+                # Create traces for smiley face
+                # Face circle (outline)
+                for i in range(36):
+                    track = pcbnew.PCB_TRACK(board)
+                    board.Add(track)
+                    self.traces.append(track)
+
+                # Left eye
+                for i in range(8):
+                    track = pcbnew.PCB_TRACK(board)
+                    board.Add(track)
+                    self.traces.append(track)
+
+                # Right eye
+                for i in range(8):
+                    track = pcbnew.PCB_TRACK(board)
+                    board.Add(track)
+                    self.traces.append(track)
+
+                # Smile (arc)
+                for i in range(16):
+                    track = pcbnew.PCB_TRACK(board)
+                    board.Add(track)
+                    self.traces.append(track)
+
+                print(f"✓ Created {len(self.traces)} traces for smiley face")
+
+            def start_timer(self):
+                """Start animation timer on main thread."""
+                if self.timer:
+                    return
+
+                self.timer = wx.Timer()
+                self.timer.Bind(wx.EVT_TIMER, self._on_timer)
+                self.timer.Start(50)  # 20 FPS
+
+                print("✓ Timer started (20 FPS)")
+
+            def _on_timer(self, event):
+                """Timer callback - runs on MAIN THREAD."""
+                try:
+                    # Update animation
+                    self.angle += 5  # Rotate 5 degrees per frame
+                    if self.angle >= 360:
+                        self.angle = 0
+
+                    # Draw smiley face at current rotation
+                    self._draw_smiley()
+
+                    # Refresh display
+                    pcbnew.Refresh()
+
+                    self.frame += 1
+
+                    if self.frame % 20 == 0:  # Log every second
+                        print(f"Frame {self.frame}, angle {self.angle}°")
+
+                except Exception as e:
+                    print(f"ERROR in timer: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            def _draw_smiley(self):
+                """Draw smiley face at current rotation."""
+                # Center of face (in mm, converted to nm)
+                center_x = 100 * 1000000  # 100mm in nm
+                center_y = 100 * 1000000
+
+                # Radius for face circle
+                face_radius = 30 * 1000000  # 30mm
+
+                # Draw face circle (outline)
+                trace_idx = 0
+                for i in range(36):
+                    angle1 = math.radians(i * 10 + self.angle)
+                    angle2 = math.radians((i + 1) * 10 + self.angle)
+
+                    x1 = int(center_x + face_radius * math.cos(angle1))
+                    y1 = int(center_y + face_radius * math.sin(angle1))
+                    x2 = int(center_x + face_radius * math.cos(angle2))
+                    y2 = int(center_y + face_radius * math.sin(angle2))
+
+                    track = self.traces[trace_idx]
+                    track.SetStart(pcbnew.VECTOR2I(x1, y1))
+                    track.SetEnd(pcbnew.VECTOR2I(x2, y2))
+                    track.SetWidth(500000)  # 0.5mm
+                    track.SetLayer(pcbnew.F_Cu)
+
+                    trace_idx += 1
+
+                # Draw left eye (rotate with face)
+                eye_radius = 3 * 1000000  # 3mm
+                left_eye_x = center_x + int(10 * 1000000 * math.cos(math.radians(self.angle)))
+                left_eye_y = center_y + int(10 * 1000000 * math.sin(math.radians(self.angle)))
+
+                for i in range(8):
+                    angle1 = math.radians(i * 45)
+                    angle2 = math.radians((i + 1) * 45)
+
+                    x1 = int(left_eye_x + eye_radius * math.cos(angle1))
+                    y1 = int(left_eye_y + eye_radius * math.sin(angle1))
+                    x2 = int(left_eye_x + eye_radius * math.cos(angle2))
+                    y2 = int(left_eye_y + eye_radius * math.sin(angle2))
+
+                    track = self.traces[trace_idx]
+                    track.SetStart(pcbnew.VECTOR2I(x1, y1))
+                    track.SetEnd(pcbnew.VECTOR2I(x2, y2))
+                    track.SetWidth(300000)  # 0.3mm
+                    track.SetLayer(pcbnew.F_Cu)
+
+                    trace_idx += 1
+
+                # Draw right eye (rotate with face)
+                right_eye_x = center_x - int(10 * 1000000 * math.cos(math.radians(self.angle)))
+                right_eye_y = center_y - int(10 * 1000000 * math.sin(math.radians(self.angle)))
+
+                for i in range(8):
+                    angle1 = math.radians(i * 45)
+                    angle2 = math.radians((i + 1) * 45)
+
+                    x1 = int(right_eye_x + eye_radius * math.cos(angle1))
+                    y1 = int(right_eye_y + eye_radius * math.sin(angle1))
+                    x2 = int(right_eye_x + eye_radius * math.cos(angle2))
+                    y2 = int(right_eye_y + eye_radius * math.sin(angle2))
+
+                    track = self.traces[trace_idx]
+                    track.SetStart(pcbnew.VECTOR2I(x1, y1))
+                    track.SetEnd(pcbnew.VECTOR2I(x2, y2))
+                    track.SetWidth(300000)  # 0.3mm
+                    track.SetLayer(pcbnew.F_Cu)
+
+                    trace_idx += 1
+
+                # Draw smile (arc at bottom)
+                smile_radius = 15 * 1000000  # 15mm
+                smile_center_y = center_y + 10 * 1000000  # 10mm below center
+
+                for i in range(16):
+                    # Smile arc from 200° to 340° (bottom half of circle)
+                    angle1 = math.radians(200 + i * 8.75 + self.angle)
+                    angle2 = math.radians(200 + (i + 1) * 8.75 + self.angle)
+
+                    x1 = int(center_x + smile_radius * math.cos(angle1))
+                    y1 = int(smile_center_y + smile_radius * math.sin(angle1))
+                    x2 = int(center_x + smile_radius * math.cos(angle2))
+                    y2 = int(smile_center_y + smile_radius * math.sin(angle2))
+
+                    track = self.traces[trace_idx]
+                    track.SetStart(pcbnew.VECTOR2I(x1, y1))
+                    track.SetEnd(pcbnew.VECTOR2I(x2, y2))
+                    track.SetWidth(400000)  # 0.4mm
+                    track.SetLayer(pcbnew.B_Cu)  # Use back layer for smile
+
+                    trace_idx += 1
+
+            def stop_timer(self):
+                """Stop animation timer."""
+                if self.timer:
+                    self.timer.Stop()
+                    self.timer = None
+                    print("✓ Timer stopped")
+
+            def cleanup(self):
+                """Remove all traces."""
+                print("Cleaning up traces...")
+
+                for track in self.traces:
+                    try:
+                        self.board.Remove(track)
+                    except:
+                        pass
+
+                self.traces.clear()
+
+                # Final refresh
+                try:
+                    pcbnew.Refresh()
+                except:
+                    pass
+
+                print("✓ Cleanup complete")
+
+        # Create renderer
+        renderer = SmileyRenderer(board)
+
+        # Start timer
+        print("Starting timer...")
+        renderer.start_timer()
+
+        # Show dialog to keep plugin alive
+        print("\n" + "=" * 70)
+        print("Smiley face is animating!")
+        print("Watch the PCB editor for a rotating smiley face.")
+        print("Close this dialog to stop the animation.")
+        print("=" * 70)
+
+        # Show modal dialog (blocks until user closes)
+        import wx
+        dlg = wx.MessageDialog(
+            None,
+            "Smiley face is animating!\n\n"
+            "Watch the PCB editor.\n\n"
+            "Click OK to stop.",
+            "Smiley Test Running",
+            wx.OK | wx.ICON_INFORMATION
+        )
+        dlg.ShowModal()
+        dlg.Destroy()
+
+        # Stop timer and cleanup
+        print("\nStopping animation...")
+        renderer.stop_timer()
+        renderer.cleanup()
+
+        print("✓ Test complete")
+        print("=" * 70 + "\n")
 
     def _configure_board_for_performance(self, board):
         """
