@@ -17,7 +17,10 @@ import pcbnew
 from .config import (
     MAX_WALL_TRACES, MAX_ENTITIES, MAX_PROJECTILES,
     TRACE_WIDTH_DEFAULT, VIA_DRILL_SIZE, VIA_PAD_SIZE,
-    ENTITY_FOOTPRINTS, get_footprint_library_path, DEBUG_MODE
+    get_footprint_library_path, DEBUG_MODE
+)
+from .entity_types import (
+    CATEGORY_COLLECTIBLE, CATEGORY_DECORATION, CATEGORY_ENEMY, CATEGORY_UNKNOWN
 )
 
 
@@ -107,26 +110,37 @@ class TracePool:
 
 class FootprintPool:
     """
-    Pre-allocated pool of footprints for entities (player, enemies).
+    Pre-allocated pool of footprints for entities (player, enemies, items).
 
-    Footprints are loaded from KiCad libraries and organized by entity type.
-    Different entity types use different footprints for visual distinction.
+    Footprints are organized by category:
+    - CATEGORY_COLLECTIBLE (0): Small items -> SOT-23 (3-pin)
+    - CATEGORY_DECORATION (1): Barrels, bodies -> SOIC-8 (8-pin flat)
+    - CATEGORY_ENEMY (2): Enemies -> QFP-64 (64-pin complex)
     """
+
+    # Footprint definitions for each category
+    # Format: (library_name, footprint_name, package_description)
+    FOOTPRINT_SPECS = {
+        CATEGORY_COLLECTIBLE: ("Package_TO_SOT_SMD", "SOT-23", "3-pin small"),
+        CATEGORY_DECORATION: ("Package_SO", "SOIC-8_3.9x4.9mm_P1.27mm", "8-pin flat"),
+        CATEGORY_ENEMY: ("Package_QFP", "LQFP-64_10x10mm_P0.5mm", "64-pin complex"),
+        CATEGORY_UNKNOWN: ("Package_SO", "SOIC-8_3.9x4.9mm_P1.27mm", "8-pin fallback"),
+    }
 
     def __init__(self, board, max_size=MAX_ENTITIES):
         """
-        Initialize footprint pool.
+        Initialize footprint pool with different packages per category.
 
         Args:
             board: KiCad BOARD object
-            max_size: Maximum number of footprints per entity type
+            max_size: Maximum number of footprints to pre-allocate
         """
         self.board = board
-        self.footprints = {}  # entity_type -> list of footprints
+        self.footprints = {}  # category -> list of footprints
         self.max_size = max_size
 
         if DEBUG_MODE:
-            print(f"Creating FootprintPool with {max_size} footprints per type...")
+            print(f"Creating FootprintPool with {max_size} total footprints...")
 
         # Load footprint library path
         try:
@@ -134,64 +148,77 @@ class FootprintPool:
         except RuntimeError as e:
             print(f"WARNING: {e}")
             print("Footprint rendering will be disabled.")
+            self.footprints = {cat: [] for cat in self.FOOTPRINT_SPECS.keys()}
             return
 
-        # Pre-load footprints for each entity type
-        for entity_type, footprint_ref in ENTITY_FOOTPRINTS.items():
-            self.footprints[entity_type] = []
+        # Calculate how many footprints per category
+        # Enemies are most common, collectibles second, decorations least
+        instances_per_category = {
+            CATEGORY_COLLECTIBLE: max_size // 3,   # ~33%
+            CATEGORY_DECORATION: max_size // 6,    # ~17%
+            CATEGORY_ENEMY: max_size // 2,         # ~50%
+            CATEGORY_UNKNOWN: 5,                   # Just a few fallbacks
+        }
 
-            # Parse footprint reference (format: "library:footprint")
-            if ':' not in footprint_ref:
-                print(f"WARNING: Invalid footprint reference: {footprint_ref}")
-                continue
-
-            lib_name, fp_name = footprint_ref.split(':', 1)
+        # Pre-load footprints for each category
+        for category, (lib_name, fp_name, description) in self.FOOTPRINT_SPECS.items():
+            self.footprints[category] = []
             lib_path = f"{lib_base_path}/{lib_name}.pretty"
+            count = instances_per_category[category]
 
-            # Pre-allocate multiple instances of this footprint type
-            # We don't need max_size for each type, so divide by number of types
-            instances_per_type = max(1, max_size // len(ENTITY_FOOTPRINTS))
+            if DEBUG_MODE:
+                print(f"  Loading {count}x {description} ({fp_name})...")
 
-            for i in range(instances_per_type):
+            for i in range(count):
                 try:
                     fp = pcbnew.FootprintLoad(lib_path, fp_name)
                     if fp:
-                        fp.SetReference(f"{entity_type.upper()}{i}")
-                        fp.SetValue(entity_type)
+                        # Set reference based on category
+                        cat_names = {
+                            CATEGORY_COLLECTIBLE: "ITEM",
+                            CATEGORY_DECORATION: "DECOR",
+                            CATEGORY_ENEMY: "ENEMY",
+                            CATEGORY_UNKNOWN: "UNK"
+                        }
+                        ref = f"{cat_names.get(category, 'UNK')}{i}"
+                        fp.SetReference(ref)
+                        fp.SetValue(description)
                         # Start off-screen
                         fp.SetPosition(pcbnew.VECTOR2I(-1000000000, -1000000000))
                         board.Add(fp)
-                        self.footprints[entity_type].append(fp)
+                        self.footprints[category].append(fp)
                     else:
                         if DEBUG_MODE:
-                            print(f"WARNING: Could not load {lib_path}/{fp_name}")
+                            print(f"    WARNING: Could not load {lib_path}/{fp_name}")
                         break
                 except Exception as e:
                     if DEBUG_MODE:
-                        print(f"WARNING: Error loading footprint {footprint_ref}: {e}")
+                        print(f"    WARNING: Error loading {fp_name}: {e}")
                     break
+
+            if DEBUG_MODE:
+                print(f"    [OK] Loaded {len(self.footprints[category])} {description}")
 
         if DEBUG_MODE:
             total = sum(len(fps) for fps in self.footprints.values())
-            print(f"[OK] FootprintPool created with {total} footprints across "
-                  f"{len(self.footprints)} types")
+            print(f"[OK] FootprintPool created with {total} footprints total")
 
-    def get(self, index, entity_type):
+    def get(self, index, category):
         """
-        Get footprint for entity type at index.
+        Get footprint for category at index.
 
         Args:
-            index: Index within entity type pool
-            entity_type: Type of entity ('player', 'imp', 'baron', etc.)
+            index: Index within category pool (will wrap if too large)
+            category: CATEGORY_* constant (COLLECTIBLE, DECORATION, ENEMY, UNKNOWN)
 
         Returns:
             FOOTPRINT object, or None if pool is empty
         """
-        # Get pool for this entity type (fallback to default)
-        if entity_type not in self.footprints:
-            entity_type = 'default'
+        # Validate category
+        if category not in self.footprints:
+            category = CATEGORY_UNKNOWN
 
-        pool = self.footprints.get(entity_type, [])
+        pool = self.footprints.get(category, [])
         if not pool:
             return None
 
@@ -209,7 +236,7 @@ class FootprintPool:
         off_screen = pcbnew.VECTOR2I(-1000000000, -1000000000)
         current_index = 0
 
-        for entity_type, pool in self.footprints.items():
+        for category, pool in self.footprints.items():
             for i, fp in enumerate(pool):
                 if current_index >= used_count:
                     fp.SetPosition(off_screen)

@@ -25,6 +25,7 @@ from .config import (
 )
 from .coordinate_transform import CoordinateTransform
 from .object_pool import create_all_pools
+from .entity_types import get_footprint_category
 
 
 class DoomPCBRenderer:
@@ -284,91 +285,74 @@ class DoomPCBRenderer:
 
     def _render_entities(self, entities, start_index):
         """
-        Render player and enemies as wireframe rectangles.
+        Render entities as footprints based on their category.
 
-        Each entity becomes 4 PCB_TRACK objects (wireframe box):
-        - Top edge: (x_left, y_top) -> (x_right, y_top)
-        - Bottom edge: (x_left, y_bottom) -> (x_right, y_bottom)
-        - Left edge: (x_left, y_top) -> (x_left, y_bottom)
-        - Right edge: (x_right, y_top) -> (x_right, y_bottom)
-
-        Entities use consistent styling (always F.Cu, thicker traces) to distinguish
-        from walls.
+        Entity types are mapped to footprint categories:
+        - Collectibles (health, ammo, weapons) -> SOT-23 (small 3-pin)
+        - Decorations (barrels, bodies, decorations) -> SOIC-8 (medium 8-pin)
+        - Enemies (zombies, demons, monsters) -> QFP-64 (large 64-pin)
 
         Args:
             entities: List of dicts with keys: x, y_top, y_bottom, height, type, distance
-                     OR legacy format: (x, y, type, angle) tuples
-            start_index: Index in trace pool where entity traces start (after walls)
+                     type = DOOM MT_* enum value (MT_SHOTGUY, MT_MISC11, etc.)
+            start_index: Unused (kept for API compatibility)
 
         Returns:
-            int: Number of traces used for entities
+            int: Number of footprints used
         """
-        trace_pool = self.pools['traces']
-        trace_index = start_index
-        traces_used = 0
+        footprint_pool = self.pools['footprints']
+        footprint_index = 0
+
+        # Count entities per category for proper pool indexing
+        category_indices = {}
 
         for entity in entities:
-            # Check if this is wireframe format (dict) or legacy format (tuple)
-            if isinstance(entity, dict):
-                # Wireframe format: {"x": X, "y_top": Yt, "y_bottom": Yb, "height": H, "type": T, "distance": D}
-                x = entity.get('x', 0)
-                y_top = entity.get('y_top', 0)
-                y_bottom = entity.get('y_bottom', 0)
-                height = entity.get('height', 16)  # Default sprite width (DOOM units)
-                distance = entity.get('distance', 0)
-
-                # Calculate rectangle corners
-                # Entity width is centered on x coordinate
-                half_width = height / 2
-                x_left = x - half_width
-                x_right = x + half_width
-
-                # Define 4 edges of wireframe box
-                edges = [
-                    (x_left, y_top, x_right, y_top),      # Top edge
-                    (x_left, y_bottom, x_right, y_bottom), # Bottom edge
-                    (x_left, y_top, x_left, y_bottom),    # Left edge
-                    (x_right, y_top, x_right, y_bottom)   # Right edge
-                ]
-
-                # Render each edge as a separate trace
-                for (sx, sy, ex, ey) in edges:
-                    # Check pool capacity
-                    if trace_index >= len(trace_pool.objects):
-                        if DEBUG_MODE:
-                            print(f"WARNING: Trace pool exhausted at {trace_index} (entities)")
-                        break
-
-                    # Get trace from pool (reuse existing object)
-                    trace = trace_pool.get(trace_index)
-                    trace_index += 1
-                    traces_used += 1
-
-                    # Convert DOOM coordinates to KiCad coordinates
-                    kicad_sx, kicad_sy = CoordinateTransform.doom_to_kicad(sx, sy)
-                    kicad_ex, kicad_ey = CoordinateTransform.doom_to_kicad(ex, ey)
-
-                    # Update trace geometry
-                    trace.SetStart(pcbnew.VECTOR2I(kicad_sx, kicad_sy))
-                    trace.SetEnd(pcbnew.VECTOR2I(kicad_ex, kicad_ey))
-
-                    # Entities always use F.Cu layer (consistent visibility)
-                    # Use slightly thicker traces than walls to distinguish entities
-                    trace.SetLayer(pcbnew.F_Cu)
-                    trace.SetWidth(TRACE_WIDTH_CLOSE)  # Always bright/thick for entities
-
-                    # Set net (required for electrical authenticity)
-                    trace.SetNet(self.doom_net)
-
-            else:
-                # Legacy format: (x, y, type, angle) - not supported in wireframe mode
-                # This is only for backwards compatibility during migration
-                if DEBUG_MODE:
-                    print(f"WARNING: Legacy entity format not supported in wireframe mode")
+            if not isinstance(entity, dict):
                 continue
 
-        # Return number of traces used for entities
-        return traces_used
+            # Extract entity data
+            x = entity.get('x', 0)
+            y_top = entity.get('y_top', 0)
+            y_bottom = entity.get('y_bottom', 0)
+            mobj_type = entity.get('type', 0)  # MT_* enum value from DOOM
+
+            # Calculate entity center position
+            y_center = (y_top + y_bottom) / 2
+
+            # Map DOOM entity type to footprint category
+            category = get_footprint_category(mobj_type)
+
+            # Get index within this category's pool
+            cat_index = category_indices.get(category, 0)
+            category_indices[category] = cat_index + 1
+
+            # Get footprint from pool
+            fp = footprint_pool.get(cat_index, category)
+            if fp is None:
+                if DEBUG_MODE:
+                    print(f"WARNING: No footprint available for category {category}")
+                continue
+
+            # Convert DOOM coordinates to KiCad
+            kicad_x, kicad_y = CoordinateTransform.doom_to_kicad(x, y_center)
+
+            # Update footprint position
+            fp.SetPosition(pcbnew.VECTOR2I(kicad_x, kicad_y))
+
+            # Optional: Rotate footprint based on distance for visual effect
+            # Closer entities face player (0 deg), far entities face away (180 deg)
+            # Uncomment to enable rotation effect:
+            # distance = entity.get('distance', 500)
+            # angle = int((distance / 999) * 180)  # 0-180 degrees
+            # fp.SetOrientation(pcbnew.EDA_ANGLE(angle, pcbnew.DEGREES_T))
+
+            footprint_index += 1
+
+        # Hide unused footprints
+        footprint_pool.hide_unused(footprint_index)
+
+        # Return number of footprints used (not traces!)
+        return 0  # Return 0 because we don't use traces for entities anymore
 
     def _render_projectiles(self, projectiles):
         """
