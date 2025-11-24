@@ -13,6 +13,8 @@ import threading
 import time
 import sys
 import os
+import subprocess
+from PIL import Image
 
 try:
     import pygame
@@ -69,6 +71,59 @@ class MinimalRenderer:
             import shutil
             shutil.rmtree(self.framebuffer_dir)
             print(f"✓ Cleared old screenshots from {self.framebuffer_dir}/")
+
+    def _capture_sdl_window(self, output_path):
+        """Capture SDL window screenshot using screencapture on macOS."""
+        try:
+            # Use screencapture to grab SDL window by name
+            # -l captures specific window by ID
+            # First, get window ID for "DOOM (SDL)"
+            result = subprocess.run(
+                ['osascript', '-e', 'tell application "System Events" to get the id of (first window of (first process whose name contains "doomgeneric_kicad"))'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                window_id = result.stdout.strip()
+                # Capture that window
+                subprocess.run(
+                    ['screencapture', '-l', window_id, '-x', output_path],
+                    timeout=2
+                )
+                return True
+        except Exception as e:
+            print(f"Warning: Could not capture SDL window: {e}")
+        return False
+
+    def _combine_screenshots(self, python_path, sdl_path, combined_path):
+        """Combine Python and SDL screenshots side-by-side."""
+        try:
+            # Load both images
+            python_img = Image.open(python_path)
+            sdl_img = Image.open(sdl_path)
+
+            # Resize SDL to match Python height if needed
+            if sdl_img.height != python_img.height:
+                aspect = sdl_img.width / sdl_img.height
+                new_width = int(python_img.height * aspect)
+                sdl_img = sdl_img.resize((new_width, python_img.height), Image.LANCZOS)
+
+            # Create combined image (side-by-side)
+            total_width = python_img.width + sdl_img.width
+            combined = Image.new('RGB', (total_width, python_img.height))
+
+            # Paste images side-by-side
+            combined.paste(python_img, (0, 0))
+            combined.paste(sdl_img, (python_img.width, 0))
+
+            # Save combined image
+            combined.save(combined_path)
+            return True
+        except Exception as e:
+            print(f"Warning: Could not combine screenshots: {e}")
+            return False
 
     def init_pygame(self):
         pygame.init()
@@ -303,13 +358,36 @@ class MinimalRenderer:
             self.last_fps_time = current_time
             self.start_time = current_time
 
-        # Take screenshot every 10 seconds
+        # Take combined screenshot every 10 seconds
         if self.last_screenshot_time is None:
             self.last_screenshot_time = current_time
         elif current_time - self.last_screenshot_time >= 10.0:
-            screenshot_path = os.path.join(self.framebuffer_dir, f"frame_{int(current_time)}.png")
-            pygame.image.save(self.screen, screenshot_path)
-            print(f"Screenshot saved: {screenshot_path}")
+            timestamp = int(current_time)
+
+            # Save Python renderer screenshot
+            python_path = os.path.join(self.framebuffer_dir, f"python_{timestamp}.png")
+            pygame.image.save(self.screen, python_path)
+
+            # Capture SDL window screenshot
+            sdl_path = os.path.join(self.framebuffer_dir, f"sdl_{timestamp}.png")
+            sdl_captured = self._capture_sdl_window(sdl_path)
+
+            if sdl_captured:
+                # Combine screenshots side-by-side
+                combined_path = os.path.join(self.framebuffer_dir, f"combined_{timestamp}.png")
+                if self._combine_screenshots(python_path, sdl_path, combined_path):
+                    print(f"✓ Combined screenshot saved: {combined_path}")
+                    # Clean up individual screenshots
+                    try:
+                        os.remove(python_path)
+                        os.remove(sdl_path)
+                    except:
+                        pass
+                else:
+                    print(f"✓ Python screenshot saved: {python_path}")
+            else:
+                print(f"✓ Python screenshot saved: {python_path}")
+
             self.last_screenshot_time = current_time
 
     def handle_input(self):
