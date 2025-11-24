@@ -193,20 +193,36 @@ static char* extract_vectors_to_json(size_t* out_len) {
             continue;
         }
 
-        /* Center position */
+        /* Center X position */
         int x = (x1 + x2) / 2;
-        int y = viewheight / 2;  /* Simplified - could use gz for actual height */
 
         /* Calculate distance from scale */
         int scale = (vis->scale >> FRACBITS);
-        int distance = (scale > 0) ? (1000 / scale) : 999;
+        if (scale <= 0) scale = 1;
+        int distance = 1000 / scale;
         if (distance < 0) distance = 999;
         if (distance > 999) distance = 999;
 
-        /* Size based on scale */
-        int size = scale / 10;
-        if (size < 3) size = 3;
-        if (size > 50) size = 50;
+        /* Calculate sprite screen height using DOOM's projection math */
+        /* gzt is the top of the sprite in world space (fixed point) */
+        /* Convert to screen Y coordinate using the same math DOOM uses */
+        fixed_t gzt = vis->gzt;
+        fixed_t gz = gzt - (vis->scale * 64);  /* Approximate bottom (64 unit tall sprite) */
+
+        /* Project world Z to screen Y using centeryfrac and scale */
+        /* centeryfrac = viewheight/2 in fixed point */
+        extern fixed_t centeryfrac;
+        int y_top = (centeryfrac - (gzt * vis->scale)) >> FRACBITS;
+        int y_bottom = (centeryfrac - (gz * vis->scale)) >> FRACBITS;
+
+        /* Clamp to screen bounds */
+        if (y_top < 0) y_top = 0;
+        if (y_top >= viewheight) y_top = viewheight - 1;
+        if (y_bottom < 0) y_bottom = 0;
+        if (y_bottom >= viewheight) y_bottom = viewheight - 1;
+
+        int sprite_height = y_bottom - y_top;
+        if (sprite_height < 5) sprite_height = 5;
 
         /* Sprite type - use sprite index for unique identification */
         int type = i % 8;  /* Use index modulo 8 for color variety */
@@ -216,8 +232,8 @@ static char* extract_vectors_to_json(size_t* out_len) {
         }
 
         offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
-                          "{\"x\":%d,\"y\":%d,\"size\":%d,\"type\":%d,\"distance\":%d,\"angle\":0}",
-                          x, y, size, type, distance);
+                          "{\"x\":%d,\"y_top\":%d,\"y_bottom\":%d,\"height\":%d,\"type\":%d,\"distance\":%d,\"angle\":0}",
+                          x, y_top, y_bottom, sprite_height, type, distance);
     }
 
     /* Close entities array */

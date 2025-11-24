@@ -358,44 +358,59 @@ class StandaloneRenderer:
             ]
 
             for entity in frame['entities']:
-                # Get entity properties first (before screen conversion)
+                # Get entity properties
                 entity_x = entity['x']
                 entity_type = entity.get('type', 0)
                 distance = entity.get('distance', 100)
 
                 # Check if entity is occluded by a wall
-                # Allow some tolerance for "windows" (gaps in walls)
                 if int(entity_x) in wall_occlusion:
                     wall_distance = wall_occlusion[int(entity_x)]
-                    # Only hide if wall is significantly closer (30 units threshold for windows)
                     if wall_distance < distance - 30:
                         continue  # Skip this entity - it's behind a wall
 
-                x, y = self.doom_to_screen(entity_x, entity['y'])
+                # Get Y coordinates - now using proper screen-space coords from DOOM's projection
+                if 'y_top' in entity and 'y_bottom' in entity:
+                    # New format with proper perspective projection
+                    entity_y_top = entity['y_top']
+                    entity_y_bottom = entity['y_bottom']
+                    height = entity.get('height', entity_y_bottom - entity_y_top)
+                else:
+                    # Fallback for old format
+                    entity_y = entity.get('y', self.doom_height // 2)
+                    height = entity.get('size', 10)
+                    entity_y_top = entity_y - height // 2
+                    entity_y_bottom = entity_y + height // 2
+
+                # Convert DOOM coordinates to screen coordinates
+                x_screen, y_top_screen = self.doom_to_screen(entity_x, entity_y_top)
+                _, y_bottom_screen = self.doom_to_screen(entity_x, entity_y_bottom)
 
                 # Choose color based on type
                 color = entity_colors[entity_type % len(entity_colors)]
 
-                # Scale size by distance (closer = bigger)
-                # Use distance directly to compute size (ignore DOOM's size field)
-                # Close = 10-15px, Medium = 5-8px, Far = 2-4px
-                radius = int(1500 / max(distance, 100))
-                radius = max(2, min(15, radius))  # Clamp to reasonable range
-
                 # Apply brightness falloff with distance
                 t = min(1.0, max(0.0, distance / 500.0))
-                brightness_factor = 1.0 - (t * 0.4)  # Less aggressive than walls
+                brightness_factor = 1.0 - (t * 0.4)
                 color = tuple(int(c * brightness_factor) for c in color)
 
-                # Draw as square/rectangle
-                rect_size = radius * 2
-                pygame.draw.rect(self.screen, color,
-                               (x - radius, y - radius, rect_size, rect_size), 0)
+                # Calculate screen-space dimensions
+                sprite_height_screen = abs(y_bottom_screen - y_top_screen)
+                sprite_width_screen = max(5, int(sprite_height_screen * 0.6))  # Width ~60% of height
 
-                # Draw border for better visibility
-                border_color = tuple(min(255, int(c * 1.3)) for c in color)
-                pygame.draw.rect(self.screen, border_color,
-                               (x - radius, y - radius, rect_size, rect_size), 1)
+                # Draw entity as rectangle matching DOOM's sprite projection
+                y_top_draw = min(y_top_screen, y_bottom_screen)
+                entity_rect = pygame.Rect(
+                    x_screen - sprite_width_screen // 2,
+                    y_top_draw,
+                    sprite_width_screen,
+                    sprite_height_screen
+                )
+                pygame.draw.rect(self.screen, color, entity_rect, 0)  # Filled
+
+                # Draw border (darker version of color)
+                border_color = tuple(max(0, int(c * 0.6)) for c in color)
+                pygame.draw.rect(self.screen, border_color, entity_rect, 1)  # Border
 
         # Render projectiles
         if 'projectiles' in frame:
