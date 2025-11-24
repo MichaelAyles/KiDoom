@@ -24,9 +24,17 @@ SOCKET_RECV_TIMEOUT = 1.0
 # ============================================================================
 
 # Maximum number of wall traces per frame
-# Typical DOOM frame: 100-300 wall segments
-# We pre-allocate enough for worst-case scenarios
+# WIREFRAME MODE: Each wall = 4 edges (top, bottom, left, right)
+# Typical DOOM frame: 30-70 walls × 4 edges = 120-280 traces
+# Entities: 10 entities × 4 edges = 40 traces
+# Total: ~320 traces per frame
+# We pre-allocate 500 for safety margin
 MAX_WALL_TRACES = 500
+
+# Wireframe rendering parameters
+EDGES_PER_WALL = 4  # Top, bottom, left, right edges
+MAX_WALLS_PER_FRAME = 70  # Typical max walls visible
+MAX_ENTITIES_PER_FRAME = 10  # Typical max entities visible
 
 # Maximum number of entities (player + enemies)
 # Typical: 1 player + 5-15 enemies

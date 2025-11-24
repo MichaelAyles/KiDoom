@@ -62,6 +62,11 @@ class TracePool:
         if DEBUG_MODE:
             print(f"✓ TracePool created with {len(self.traces)} traces")
 
+    @property
+    def objects(self):
+        """Alias for traces list (for consistent interface)."""
+        return self.traces
+
     def get(self, index):
         """
         Get trace at index for reuse.
