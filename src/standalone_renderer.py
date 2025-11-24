@@ -156,9 +156,11 @@ class MinimalRenderer:
             print("Receive loop exiting")
 
     def doom_to_screen(self, x, y):
-        """Convert DOOM 320x200 to screen coordinates."""
-        scale_x = SCREEN_WIDTH / DOOM_WIDTH
-        scale_y = SCREEN_HEIGHT / DOOM_HEIGHT
+        """Convert DOOM 320x200 to screen coordinates with proper aspect ratio."""
+        # DOOM renders at 320x200, but we want to fill 800x400 (same aspect)
+        # Direct linear scaling
+        scale_x = SCREEN_WIDTH / DOOM_WIDTH   # 800/320 = 2.5
+        scale_y = SCREEN_HEIGHT / DOOM_HEIGHT # 400/200 = 2.0
         return int(x * scale_x), int(y * scale_y)
 
     def render_frame(self):
