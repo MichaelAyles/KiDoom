@@ -262,18 +262,19 @@ class StandaloneRenderer:
                         b = int(b * brightness_factor)
                         color = (r, g, b)
 
-                        # Width based on distance - thicker lines for close walls
-                        # distance 100 = 6px, 250 = 2px, 500+ = 1px
-                        width = max(1, min(6, int(600 / max(distance, 100))))
-
-                        # Draw wall as polygon (quadrilateral)
+                        # Draw wall as FILLED polygon (quadrilateral)
+                        # This matches DOOM's actual wall rendering
                         points = [
                             (x1_screen, y1_top_screen),
                             (x1_screen, y1_bottom_screen),
                             (x2_screen, y2_bottom_screen),
                             (x2_screen, y2_top_screen)
                         ]
-                        pygame.draw.polygon(self.screen, color, points, width)
+                        pygame.draw.polygon(self.screen, color, points, 0)  # 0 = filled
+
+                        # Optional: Draw darker outline for definition
+                        outline_color = tuple(max(0, int(c * 0.7)) for c in color)
+                        pygame.draw.polygon(self.screen, outline_color, points, 1)
 
                     elif len(wall) >= 5:
                         # V2 format: [x1, y1, x2, y2, distance]
