@@ -333,19 +333,48 @@ class StandaloneRenderer:
 
         # Render entities (player, enemies, items)
         if 'entities' in frame:
+            # Define unique colors for different entity types (8 distinct colors)
+            entity_colors = [
+                (255, 100, 100),  # Red - enemies
+                (100, 255, 100),  # Green - health/armor
+                (255, 255, 100),  # Yellow - ammo
+                (100, 100, 255),  # Blue - weapons
+                (255, 100, 255),  # Magenta - power-ups
+                (100, 255, 255),  # Cyan - keys
+                (255, 180, 100),  # Orange - barrels
+                (200, 200, 200),  # White - decorations
+            ]
+
             for entity in frame['entities']:
                 x, y = self.doom_to_screen(entity['x'], entity['y'])
 
-                # Draw as circle for simplicity
-                radius = entity.get('size', 5)
-                pygame.draw.circle(self.screen, COLOR_ENTITY, (x, y), radius)
+                # Get entity properties
+                entity_type = entity.get('type', 0)
+                distance = entity.get('distance', 100)
 
-                # Draw facing direction
-                angle = entity.get('angle', 0)
-                import math
-                dir_x = x + int(radius * 2 * math.cos(math.radians(angle)))
-                dir_y = y + int(radius * 2 * math.sin(math.radians(angle)))
-                pygame.draw.line(self.screen, COLOR_ENTITY, (x, y), (dir_x, dir_y), 2)
+                # Choose color based on type
+                color = entity_colors[entity_type % len(entity_colors)]
+
+                # Scale size by distance (closer = bigger)
+                base_size = entity.get('size', 5)
+                distance_scale = max(0.3, min(1.5, 400 / max(distance, 100)))
+                radius = int(base_size * distance_scale)
+                radius = max(3, min(20, radius))  # Clamp to reasonable range
+
+                # Apply brightness falloff with distance
+                t = min(1.0, max(0.0, distance / 500.0))
+                brightness_factor = 1.0 - (t * 0.4)  # Less aggressive than walls
+                color = tuple(int(c * brightness_factor) for c in color)
+
+                # Draw as square/rectangle
+                rect_size = radius * 2
+                pygame.draw.rect(self.screen, color,
+                               (x - radius, y - radius, rect_size, rect_size), 0)
+
+                # Draw border for better visibility
+                border_color = tuple(min(255, int(c * 1.3)) for c in color)
+                pygame.draw.rect(self.screen, border_color,
+                               (x - radius, y - radius, rect_size, rect_size), 1)
 
         # Render projectiles
         if 'projectiles' in frame:

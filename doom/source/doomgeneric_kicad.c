@@ -208,16 +208,16 @@ static char* extract_vectors_to_json(size_t* out_len) {
         if (size < 3) size = 3;
         if (size > 50) size = 50;
 
-        /* Sprite type (simplified - could decode from patch/colormap) */
-        int type = 1;  /* Default to enemy/object */
+        /* Sprite type - use sprite index for unique identification */
+        int type = i % 8;  /* Use index modulo 8 for color variety */
 
         if (i > 0) {
             offset += snprintf(json_buf + offset, sizeof(json_buf) - offset, ",");
         }
 
         offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
-                          "{\"x\":%d,\"y\":%d,\"size\":%d,\"type\":%d,\"angle\":0}",
-                          x, y, size, type);
+                          "{\"x\":%d,\"y\":%d,\"size\":%d,\"type\":%d,\"distance\":%d,\"angle\":0}",
+                          x, y, size, type, distance);
     }
 
     /* Close entities array */
