@@ -248,14 +248,22 @@ class StandaloneRenderer:
 
                         # Color based on depth - interpolate between close and far colors
                         # Closer walls = brighter orange, distant walls = blue-gray
-                        t = min(1.0, max(0.0, distance / 200.0))  # Normalize distance
+                        t = min(1.0, max(0.0, distance / 200.0))  # Normalize distance (0=close, 1=far)
+
+                        # Interpolate base color
                         r = int(COLOR_WALL_CLOSE[0] * (1-t) + COLOR_WALL_FAR[0] * t)
                         g = int(COLOR_WALL_CLOSE[1] * (1-t) + COLOR_WALL_FAR[1] * t)
                         b = int(COLOR_WALL_CLOSE[2] * (1-t) + COLOR_WALL_FAR[2] * t)
+
+                        # Apply brightness falloff (additional darkening with distance)
+                        brightness_factor = 1.0 - (t * 0.5)  # Reduce brightness by up to 50% for distant walls
+                        r = int(r * brightness_factor)
+                        g = int(g * brightness_factor)
+                        b = int(b * brightness_factor)
                         color = (r, g, b)
 
-                        # Width based on distance
-                        width = max(1, min(5, 300 // max(distance, 1)))
+                        # Width based on distance - thicker lines for close walls
+                        width = max(1, min(6, int(400 / max(distance, 20))))
 
                         # Draw wall as polygon (quadrilateral)
                         points = [
@@ -274,11 +282,20 @@ class StandaloneRenderer:
 
                         # Color based on depth - same interpolation
                         t = min(1.0, max(0.0, distance / 200.0))
+
+                        # Interpolate base color
                         r = int(COLOR_WALL_CLOSE[0] * (1-t) + COLOR_WALL_FAR[0] * t)
                         g = int(COLOR_WALL_CLOSE[1] * (1-t) + COLOR_WALL_FAR[1] * t)
                         b = int(COLOR_WALL_CLOSE[2] * (1-t) + COLOR_WALL_FAR[2] * t)
+
+                        # Apply brightness falloff
+                        brightness_factor = 1.0 - (t * 0.5)
+                        r = int(r * brightness_factor)
+                        g = int(g * brightness_factor)
+                        b = int(b * brightness_factor)
                         color = (r, g, b)
-                        width = max(1, min(5, 300 // max(distance, 1)))
+
+                        width = max(1, min(6, int(400 / max(distance, 20))))
 
                         pygame.draw.line(self.screen, color, (x1_screen, y1_screen),
                                        (x2_screen, y2_screen), width)
@@ -295,11 +312,20 @@ class StandaloneRenderer:
 
                     # Color based on depth - same interpolation
                     t = min(1.0, max(0.0, distance / 200.0))
+
+                    # Interpolate base color
                     r = int(COLOR_WALL_CLOSE[0] * (1-t) + COLOR_WALL_FAR[0] * t)
                     g = int(COLOR_WALL_CLOSE[1] * (1-t) + COLOR_WALL_FAR[1] * t)
                     b = int(COLOR_WALL_CLOSE[2] * (1-t) + COLOR_WALL_FAR[2] * t)
+
+                    # Apply brightness falloff
+                    brightness_factor = 1.0 - (t * 0.5)
+                    r = int(r * brightness_factor)
+                    g = int(g * brightness_factor)
+                    b = int(b * brightness_factor)
                     color = (r, g, b)
-                    width = max(1, min(5, 300 // max(distance, 1)))
+
+                    width = max(1, min(6, int(400 / max(distance, 20))))
 
                     pygame.draw.line(self.screen, color, (x1_screen, y1_screen),
                                    (x2_screen, y2_screen), width)
