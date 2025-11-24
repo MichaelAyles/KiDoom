@@ -331,6 +331,17 @@ class StandaloneRenderer:
                     pygame.draw.line(self.screen, color, (x1_screen, y1_screen),
                                    (x2_screen, y2_screen), width)
 
+        # Build occlusion map from walls (for hiding entities behind walls)
+        wall_occlusion = {}  # x_column -> closest_distance
+        if 'walls' in frame:
+            for wall in frame['walls']:
+                if isinstance(wall, list) and len(wall) >= 7:
+                    x1, _, _, x2, _, _, distance = wall[:7]
+                    # Mark all columns this wall spans
+                    for x in range(int(x1), int(x2) + 1):
+                        if x not in wall_occlusion or distance < wall_occlusion[x]:
+                            wall_occlusion[x] = distance
+
         # Render entities (player, enemies, items)
         if 'entities' in frame:
             # Define unique colors for different entity types (8 distinct colors)
@@ -346,20 +357,29 @@ class StandaloneRenderer:
             ]
 
             for entity in frame['entities']:
-                x, y = self.doom_to_screen(entity['x'], entity['y'])
-
-                # Get entity properties
+                # Get entity properties first (before screen conversion)
+                entity_x = entity['x']
                 entity_type = entity.get('type', 0)
                 distance = entity.get('distance', 100)
+
+                # Check if entity is occluded by a wall
+                # Allow some tolerance for "windows" (gaps in walls)
+                if int(entity_x) in wall_occlusion:
+                    wall_distance = wall_occlusion[int(entity_x)]
+                    # Only hide if wall is significantly closer (30 units threshold for windows)
+                    if wall_distance < distance - 30:
+                        continue  # Skip this entity - it's behind a wall
+
+                x, y = self.doom_to_screen(entity_x, entity['y'])
 
                 # Choose color based on type
                 color = entity_colors[entity_type % len(entity_colors)]
 
                 # Scale size by distance (closer = bigger)
-                base_size = entity.get('size', 5)
-                distance_scale = max(0.3, min(1.5, 400 / max(distance, 100)))
-                radius = int(base_size * distance_scale)
-                radius = max(3, min(20, radius))  # Clamp to reasonable range
+                # Use distance directly to compute size (ignore DOOM's size field)
+                # Close = 10-15px, Medium = 5-8px, Far = 2-4px
+                radius = int(1500 / max(distance, 100))
+                radius = max(2, min(15, radius))  # Clamp to reasonable range
 
                 # Apply brightness falloff with distance
                 t = min(1.0, max(0.0, distance / 500.0))
