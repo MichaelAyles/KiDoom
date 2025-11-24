@@ -248,7 +248,7 @@ class StandaloneRenderer:
 
                         # Color based on depth - interpolate between close and far colors
                         # Closer walls = brighter orange, distant walls = blue-gray
-                        t = min(1.0, max(0.0, distance / 200.0))  # Normalize distance (0=close, 1=far)
+                        t = min(1.0, max(0.0, distance / 500.0))  # Normalize distance (0=close, 1=far at 500)
 
                         # Interpolate base color
                         r = int(COLOR_WALL_CLOSE[0] * (1-t) + COLOR_WALL_FAR[0] * t)
@@ -263,7 +263,8 @@ class StandaloneRenderer:
                         color = (r, g, b)
 
                         # Width based on distance - thicker lines for close walls
-                        width = max(1, min(6, int(400 / max(distance, 20))))
+                        # distance 100 = 6px, 250 = 2px, 500+ = 1px
+                        width = max(1, min(6, int(600 / max(distance, 100))))
 
                         # Draw wall as polygon (quadrilateral)
                         points = [
@@ -281,7 +282,7 @@ class StandaloneRenderer:
                         x2_screen, y2_screen = self.doom_to_screen(x2, y2)
 
                         # Color based on depth - same interpolation
-                        t = min(1.0, max(0.0, distance / 200.0))
+                        t = min(1.0, max(0.0, distance / 500.0))
 
                         # Interpolate base color
                         r = int(COLOR_WALL_CLOSE[0] * (1-t) + COLOR_WALL_FAR[0] * t)
@@ -295,7 +296,7 @@ class StandaloneRenderer:
                         b = int(b * brightness_factor)
                         color = (r, g, b)
 
-                        width = max(1, min(6, int(400 / max(distance, 20))))
+                        width = max(1, min(6, int(600 / max(distance, 100))))
 
                         pygame.draw.line(self.screen, color, (x1_screen, y1_screen),
                                        (x2_screen, y2_screen), width)
@@ -311,7 +312,7 @@ class StandaloneRenderer:
                     x2_screen, y2_screen = self.doom_to_screen(x2, y2)
 
                     # Color based on depth - same interpolation
-                    t = min(1.0, max(0.0, distance / 200.0))
+                    t = min(1.0, max(0.0, distance / 500.0))
 
                     # Interpolate base color
                     r = int(COLOR_WALL_CLOSE[0] * (1-t) + COLOR_WALL_FAR[0] * t)
@@ -325,7 +326,7 @@ class StandaloneRenderer:
                     b = int(b * brightness_factor)
                     color = (r, g, b)
 
-                    width = max(1, min(6, int(400 / max(distance, 20))))
+                    width = max(1, min(6, int(600 / max(distance, 100))))
 
                     pygame.draw.line(self.screen, color, (x1_screen, y1_screen),
                                    (x2_screen, y2_screen), width)
