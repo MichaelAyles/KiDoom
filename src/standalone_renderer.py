@@ -303,12 +303,12 @@ class MinimalRenderer:
             if isinstance(wall, list) and len(wall) >= 8:
                 distance = wall[6]
                 silhouette = wall[7]
-                # Only render full solid walls (silhouette=3)
-                # silhouette=0: portal/opening (skip)
-                # silhouette=1: lower wall only (partial - skip for clean wireframe)
-                # silhouette=2: upper wall only (partial - skip for clean wireframe)
+                # Render solid walls (partial and full)
+                # silhouette=0: portal/opening (skip - these are empty space)
+                # silhouette=1: lower wall only (render - stairs/steps)
+                # silhouette=2: upper wall only (render - windows/openings)
                 # silhouette=3: full solid wall (render)
-                if silhouette != 3:
+                if silhouette == 0:
                     continue
                 walls_list.append(('wall', distance, wall))
 
