@@ -366,19 +366,19 @@ class MinimalRenderer:
                 t = min(1.0, distance / 500.0)
                 brightness = int(255 * (1.0 - t * 0.7))
 
-                # WALL: main wall polygon
+                # WALL: Draw as wireframe (edges only) for true wireframe aesthetic
+                # This allows seeing through to pools/floors behind walls
                 wall_color = (0, brightness, 0)
-                wall_points = [
-                    (x1_s, y1t_s),
-                    (x1_s, y1b_s),
-                    (x2_s, y2b_s),
-                    (x2_s, y2t_s)
-                ]
-                pygame.draw.polygon(self.screen, wall_color, wall_points, 0)
 
-                # Draw darker outline for wall definition
-                outline_color = (0, max(0, brightness - 50), 0)
-                pygame.draw.polygon(self.screen, outline_color, wall_points, 1)
+                # Draw the 4 edges of the wall segment
+                # Top edge
+                pygame.draw.line(self.screen, wall_color, (x1_s, y1t_s), (x2_s, y2t_s), 2)
+                # Bottom edge
+                pygame.draw.line(self.screen, wall_color, (x1_s, y1b_s), (x2_s, y2b_s), 2)
+                # Left edge
+                pygame.draw.line(self.screen, wall_color, (x1_s, y1t_s), (x1_s, y1b_s), 2)
+                # Right edge
+                pygame.draw.line(self.screen, wall_color, (x2_s, y2t_s), (x2_s, y2b_s), 2)
 
             elif obj_type == 'sprite':
                 # Draw sprite
