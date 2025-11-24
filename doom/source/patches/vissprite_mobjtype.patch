@@ -1,0 +1,26 @@
+diff --git a/r_defs.h b/r_defs.h
+index 1234567..abcdefg 100644
+--- a/r_defs.h
++++ b/r_defs.h
+@@ -330,6 +330,9 @@ typedef struct vissprite_s
+     // for color translation and shadow draw,
+     //  maxbright frames as well
+     lighttable_t*	colormap;
++
++    // KiDoom: Store entity type for footprint selection
++    int			mobjtype;
+
+     int			mobjflags;
+
+diff --git a/r_things.c b/r_things.c
+index 1234567..abcdefg 100644
+--- a/r_things.c
++++ b/r_things.c
+@@ -540,6 +540,7 @@ void R_ProjectSprite (mobj_t* thing)
+     // store information in a vissprite
+     vis = R_NewVisSprite ();
+     vis->mobjflags = thing->flags;
++    vis->mobjtype = thing->type;  // KiDoom: Capture entity type
+     vis->scale = xscale<<detailshift;
+     vis->gx = thing->x;
+     vis->gy = thing->y;

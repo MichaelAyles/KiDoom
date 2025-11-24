@@ -243,7 +243,8 @@ static char* extract_vectors_to_json(size_t* out_len) {
         int sprite_height = y_bottom - y_top;
         if (sprite_height < 5) sprite_height = 5;
 
-        int type = i % 8;
+        /* Extract real entity type from vissprite (captured during R_ProjectSprite) */
+        int type = vis->mobjtype;  /* MT_PLAYER, MT_SHOTGUY, MT_BARREL, etc. */
 
         if (i > 0) {
             offset += snprintf(json_buf + offset, sizeof(json_buf) - offset, ",");
