@@ -128,6 +128,7 @@ docs/.doctrees/
 # Framebuffer snapshots
 framebuffer/
 *.png
+!assets/*.png
 
 # OS-specific
 Thumbs.db
