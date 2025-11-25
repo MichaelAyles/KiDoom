@@ -6,9 +6,6 @@ Run DOOM inside KiCad's PCB editor using real PCB traces and component footprint
   <img src="assets/kidoom-demo.gif" alt="KiDoom Demo - DOOM running in KiCad" width="800">
 </p>
 
-![Triple Mode Rendering](https://img.shields.io/badge/Triple_Mode-SDL_%2B_Python_%2B_KiCad-blue)
-![Entity System](https://img.shields.io/badge/Entities-Real_Footprints-green)
-![Status](https://img.shields.io/badge/Status-Fully_Working-brightgreen)
 
 ## Features
 
