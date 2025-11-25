@@ -331,6 +331,14 @@ ln -s $(pwd)/kicad_doom_plugin ~/.kicad/scripting/plugins/kidoom
 
 ---
 
+## Spin-off Projects
+
+KiDoom's vector rendering approach has inspired additional experiments:
+
+**[ScopeDoom](https://github.com/MichaelAyles/ScopeDoom)** - DOOM rendered on an oscilloscope in XY mode. Uses the same vector extraction pipeline from KiDoom, outputting audio signals that draw the game on an oscilloscope display. Some of the original ScopeDoom development code is still present in this repository under `scopedoom/`.
+
+---
+
 ## Inspiration & References
 
 The wireframe approach was partly inspired by **[DOOM on a Vectrex](https://web.archive.org/web/20250807100629/http://spritesmods.com/?art=veccart&page=5)** - Sprite_tm's incredible port that renders DOOM on a 1982 vector display. That project proved vector-based DOOM rendering was viable; KiDoom just substitutes copper traces for phosphor lines.

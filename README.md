@@ -336,6 +336,10 @@ See LICENSE file.
 **Original DOOM:** id Software (1993)
 **KiCad:** Open source PCB design software
 
+## Related Projects
+
+**[ScopeDoom](https://github.com/MichaelAyles/ScopeDoom)** - DOOM rendered on an oscilloscope in XY mode, inspired by KiDoom's vector extraction approach. Some original development code remains in this repo under `scopedoom/`.
+
 ## Credits
 
 - **id Software** - Original DOOM (1993)
