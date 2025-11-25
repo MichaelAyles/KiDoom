@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/Logo.png" alt="KiDoom Logo" width="400">
+</p>
+
 # KiDoom: Running DOOM on PCB Traces
 
 *A technical deep-dive into rendering the classic 1993 shooter using real copper traces and component footprints*
