@@ -5,7 +5,7 @@
 Run DOOM inside KiCad's PCB editor using real PCB traces and component footprints as the rendering medium. Features triple-mode rendering: SDL window, Python wireframe renderer, and KiCad PCB visualization.
 
 <p align="center">
-  <img src="assets/kidoom-demo.gif" alt="KiDoom Demo - DOOM running in KiCad" width="800">
+  <img src="assets/kidoom-demo-new.gif" alt="KiDoom Demo - DOOM running in KiCad" width="800">
 </p>
 
 

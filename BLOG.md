@@ -7,7 +7,7 @@
 *A technical deep-dive into rendering the classic 1993 shooter using real copper traces and component footprints*
 
 <p align="center">
-  <img src="assets/kidoom-demo.gif" alt="KiDoom Demo - DOOM rendered on PCB traces" width="800">
+  <img src="assets/kidoom-demo-new.gif" alt="KiDoom Demo - DOOM rendered on PCB traces" width="800">
 </p>
 
 ---

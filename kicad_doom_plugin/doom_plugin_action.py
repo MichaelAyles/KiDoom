@@ -46,7 +46,7 @@ class DoomKiCadPlugin(pcbnew.ActionPlugin):
     def setup_logging(self):
         """Setup file logging for debugging."""
         # Create logs directory if it doesn't exist
-        log_dir = os.path.expanduser("~/Desktop/KiDoom/logs/plugin")
+        log_dir = os.path.expanduser("~/Desktop/Projects/KiDoom/logs/plugin")
         os.makedirs(log_dir, exist_ok=True)
 
         # Create timestamped log file
