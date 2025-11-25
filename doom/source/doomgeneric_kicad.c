@@ -339,19 +339,19 @@ void DG_DrawFrame()
 
   g_frame_count++;
 
-  /* Screenshot capture every 10 seconds */
+  /* Screenshot capture every 3 seconds (matches scope capture rate) */
   static uint32_t last_screenshot_time = 0;
   uint32_t current_time = get_time_ms();
 
   if (last_screenshot_time == 0) {
       last_screenshot_time = current_time;
-  } else if (current_time - last_screenshot_time >= 10000) {  /* 10 seconds */
-      /* Create framebuffer directory if it doesn't exist */
-      system("mkdir -p ../framebuffer");
+  } else if (current_time - last_screenshot_time >= 3000) {  /* 3 seconds */
+      /* Create assets directory if it doesn't exist */
+      system("mkdir -p ../assets");
 
       /* Generate filename with timestamp */
       char sdl_path[256];
-      snprintf(sdl_path, sizeof(sdl_path), "../framebuffer/sdl_%u.bmp", current_time / 1000);
+      snprintf(sdl_path, sizeof(sdl_path), "../assets/sdl_%u.bmp", current_time / 1000);
 
       /* Save SDL surface to BMP */
       SDL_Surface* surface = SDL_CreateRGBSurfaceFrom(
