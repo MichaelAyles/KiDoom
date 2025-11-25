@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/Logo.png" alt="KiDoom Logo" width="400">
+  <img src="assets/logo_transparent.png" alt="KiDoom Logo" width="400">
 </p>
 
 # KiDoom: Running DOOM on PCB Traces

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/Logo.png" alt="KiDoom Logo" width="400">
+  <img src="assets/logo_transparent.png" alt="KiDoom Logo" width="400">
 </p>
 
 Run DOOM inside KiCad's PCB editor using real PCB traces and component footprints as the rendering medium. Features triple-mode rendering: SDL window, Python wireframe renderer, and KiCad PCB visualization.
